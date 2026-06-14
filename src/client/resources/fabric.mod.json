@@ -13,17 +13,13 @@
 	},
 	"license": "CC0-1.0",
 	"icon": "assets/client-tools/icon.png",
-	"environment": "*",
+	"environment": "client",
 	"entrypoints": {
-		"main": [
-			"indi.ohtoai.tool.client_tools.ClientTools"
-		],
 		"client": [
 			"indi.ohtoai.tool.client_tools.client.ClientToolsClient"
 		]
 	},
 	"mixins": [
-		"client-tools.mixins.json",
 		{
 			"config": "client-tools.client.mixins.json",
 			"environment": "client"
