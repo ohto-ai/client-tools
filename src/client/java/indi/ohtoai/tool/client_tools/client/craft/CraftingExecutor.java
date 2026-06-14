@@ -6,15 +6,16 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
 import net.minecraft.network.chat.Component;
 import net.minecraft.world.InteractionHand;
+import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingMenu;
-import net.minecraft.world.inventory.ShulkerBoxMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
+import java.util.ArrayList;
 import java.util.List;
 
 /**
@@ -27,12 +28,18 @@ import java.util.List;
  *
  * In finite mode, the system calculates exactly how many source items are
  * needed and only takes that many from the input box, rather than greedily
- * emptying it.
+ * emptying it. For the last partial stack in a slot, it uses single-item
+ * shift-right-click (QUICK_MOVE button 1) to extract the exact number needed,
+ * rather than taking the entire stack.
  *
- * Full cycle (repeats until target reached or input exhausted):
- *   OPEN_INPUT  → take calculated source items (finite) or all (infinite) → close
+ * For output deposit, the player's inventory is pre-scanned (client-side,
+ * zero packets) to locate which slots contain the final product, so only
+ * those slots are processed instead of scanning all 63 menu slots.
+ *
+ * Full cycle:
+ *   OPEN_INPUT  → take calculated source items (precise for partial stacks) → close
  *   OPEN_TABLE  → per-step inner loop (until step target or no materials) → close
- *   OPEN_OUTPUT → deposit all final products → close
+ *   OPEN_OUTPUT → deposit all final products via pre-scanned slots → close
  *   CHECK_CYCLE → target reached? → DONE
  *               → source taken?     → loop back to OPEN_INPUT
  *               → nothing taken?    → DONE (input exhausted)
@@ -42,7 +49,9 @@ public class CraftingExecutor {
     private enum State {
         IDLE,
         // Input box
-        OPEN_INPUT, WAIT_INPUT_OPEN, TAKE_INPUT, WAIT_INPUT_TAKE, CLOSE_INPUT, WAIT_INPUT_CLOSE,
+        OPEN_INPUT, WAIT_INPUT_OPEN, TAKE_INPUT, WAIT_INPUT_TAKE,
+        TAKE_INPUT_PRECISE, WAIT_INPUT_PRECISE,
+        CLOSE_INPUT, WAIT_INPUT_CLOSE,
         // Crafting table
         OPEN_TABLE, WAIT_TABLE_OPEN,
         CHECK_STEP_MATERIALS,
@@ -84,9 +93,17 @@ public class CraftingExecutor {
     private int cycleCount = 0;              // how many full cycles have been completed
     private static final int MAX_CYCLES = 100; // safety limit
 
-    private static final int SHULKER_SLOTS = 27;
-    private static final int PLAYER_SLOTS_IN_SHULKER = 36;
-    private static final int WAIT_TICKS = 4;
+    // Precise extraction (for partial stacks)
+    private int preciseExtractNeeded = 0;    // remaining single items to extract from current slot
+    private int preciseExtractSlot = -1;     // shulker slot being precisely extracted
+
+    // Targeted deposit (pre-scanned menu slots, populated after container opens)
+    private final List<Integer> productDepositSlots = new ArrayList<>(); // menu slot indices (27-62) holding product
+    private int productDepositIdx = 0;       // current index into productDepositSlots
+    private int inventoryBeforeDeposit = 0;  // snapshot taken before opening output box
+
+    private static final int WAIT_TICKS = 2;       // reduced from 4; safe for both local and remote servers
+    private static final int CLOSE_WAIT_TICKS = 1;  // minimal wait for close packets
 
     private CraftingExecutor() {}
 
@@ -119,6 +136,11 @@ public class CraftingExecutor {
         this.sourceItemsToTake = -1;
         this.cycleSourceTaken = 0;
         this.cycleCount = 0;
+        this.preciseExtractNeeded = 0;
+        this.preciseExtractSlot = -1;
+        this.productDepositSlots.clear();
+        this.productDepositIdx = 0;
+        this.inventoryBeforeDeposit = 0;
         this.errorMessage = null;
 
         calculateMaterialPlan();
@@ -150,8 +172,10 @@ public class CraftingExecutor {
             case WAIT_INPUT_OPEN -> doWaitInputOpen(client);
             case TAKE_INPUT -> doTakeInput(client);
             case WAIT_INPUT_TAKE -> doWaitInputTake(client);
+            case TAKE_INPUT_PRECISE -> doTakeInputPrecise(client);
+            case WAIT_INPUT_PRECISE -> doWaitInputPrecise(client);
             case CLOSE_INPUT -> doCloseContainer(client, State.WAIT_INPUT_CLOSE);
-            case WAIT_INPUT_CLOSE -> doWaitClose(client, State.OPEN_TABLE);
+            case WAIT_INPUT_CLOSE -> doWaitClose(client, State.OPEN_TABLE, CLOSE_WAIT_TICKS);
             // Crafting table
             case OPEN_TABLE -> doOpenTable(client);
             case WAIT_TABLE_OPEN -> doWaitTableOpen(client);
@@ -162,14 +186,14 @@ public class CraftingExecutor {
             case WAIT_TAKE -> doWaitTake(client);
             case NEXT_STEP -> doNextStep(client);
             case CLOSE_TABLE -> doCloseContainer(client, State.WAIT_CLOSE_TABLE);
-            case WAIT_CLOSE_TABLE -> doWaitClose(client, State.OPEN_OUTPUT);
+            case WAIT_CLOSE_TABLE -> doWaitClose(client, State.OPEN_OUTPUT, WAIT_TICKS);
             // Output box
             case OPEN_OUTPUT -> doOpenOutput(client);
             case WAIT_OUTPUT_OPEN -> doWaitOutputOpen(client);
             case DEPOSIT_OUTPUT -> doDepositOutput(client);
             case WAIT_OUTPUT_DEPOSIT -> doWaitOutputDeposit(client);
             case CLOSE_OUTPUT -> doCloseContainer(client, State.WAIT_OUTPUT_CLOSE);
-            case WAIT_OUTPUT_CLOSE -> doWaitClose(client, State.RETRY_OUTPUT);
+            case WAIT_OUTPUT_CLOSE -> doWaitClose(client, State.RETRY_OUTPUT, CLOSE_WAIT_TICKS);
             case RETRY_OUTPUT -> doRetryOutput(client);
             // Cycle control
             case CHECK_CYCLE -> doCheckCycle(client);
@@ -351,7 +375,7 @@ public class CraftingExecutor {
 
     private void doWaitInputOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
-        if (client.player.containerMenu instanceof ShulkerBoxMenu) {
+        if (getContainerSize(client.player.containerMenu) >= 0) {
             if (sourceItemsToTake == 0) {
                 // Nothing needed this cycle — close immediately
                 state = State.CLOSE_INPUT;
@@ -362,24 +386,30 @@ public class CraftingExecutor {
             tickCounter = 0;
             return;
         }
-        if (tickCounter > 20) error("Timed out waiting for input shulker box to open");
+        if (tickCounter > 20) error("Timed out waiting for input container to open");
     }
 
     /**
      * Takes source items from the input box, stopping when enough have been
      * taken (finite mode) or all slots have been scanned (infinite mode).
      * Tracks how many were taken this cycle (cycleSourceTaken).
+     *
+     * For the last partial stack (where the slot has more items than we need),
+     * delegates to {@link #doTakeInputPrecise} which extracts exact count via
+     * single-item shift-right-clicks.
      */
     private void doTakeInput(Minecraft client) {
         if (!checkPlayer(client)) return;
-        if (!(client.player.containerMenu instanceof ShulkerBoxMenu menu)) {
-            error("Input shulker box not open");
+        AbstractContainerMenu menu = client.player.containerMenu;
+        int containerSize = getContainerSize(menu);
+        if (containerSize < 0) {
+            error("Input container not open");
             return;
         }
 
         Item sourceItem = steps.get(0).fromItem();
 
-        if (slotIndex < SHULKER_SLOTS) {
+        if (slotIndex < containerSize) {
             // Check if we've already taken enough (finite mode only)
             if (sourceItemsToTake > 0 && cycleSourceTaken >= sourceItemsToTake) {
                 state = State.CLOSE_INPUT;
@@ -389,15 +419,72 @@ public class CraftingExecutor {
 
             ItemStack stack = menu.getSlot(slotIndex).getItem();
             if (stack.getItem() == sourceItem) {
-                quickMove(client, menu.containerId, slotIndex);
-                cycleSourceTaken += stack.getCount();
+                int stackCount = stack.getCount();
+                int need = sourceItemsToTake > 0 ? sourceItemsToTake - cycleSourceTaken : Integer.MAX_VALUE;
+
+                if (need < stackCount) {
+                    // Partial stack: need fewer items than this slot holds
+                    // Use precise single-item extraction
+                    preciseExtractNeeded = need;
+                    preciseExtractSlot = slotIndex;
+                    state = State.TAKE_INPUT_PRECISE;
+                    tickCounter = 0;
+                } else {
+                    // Take the entire stack
+                    quickMove(client, menu.containerId, slotIndex);
+                    cycleSourceTaken += stackCount;
+                    slotIndex++;
+                    tickCounter = 0;
+                    state = State.WAIT_INPUT_TAKE;
+                }
+            } else {
+                slotIndex++;
+                tickCounter = 0;
+                state = State.WAIT_INPUT_TAKE;
             }
-            slotIndex++;
-            tickCounter = 0;
-            state = State.WAIT_INPUT_TAKE;
         } else {
-            // Scanned all shulker slots
+            // Scanned all container slots
             state = State.CLOSE_INPUT;
+            tickCounter = 0;
+        }
+    }
+
+    /**
+     * Extracts a single item from the shulker slot via shift-right-click
+     * (QUICK_MOVE button 1). Repeats until {@link #preciseExtractNeeded}
+     * reaches zero, then continues to the next slot.
+     */
+    private void doTakeInputPrecise(Minecraft client) {
+        if (!checkPlayer(client)) return;
+        AbstractContainerMenu menu = client.player.containerMenu;
+        if (getContainerSize(menu) < 0) {
+            error("Input container not open");
+            return;
+        }
+
+        if (preciseExtractNeeded <= 0) {
+            // Safety: should not happen
+            state = State.TAKE_INPUT;
+            tickCounter = 0;
+            return;
+        }
+
+        quickMoveSingle(client, menu.containerId, preciseExtractSlot);
+        cycleSourceTaken++;
+        preciseExtractNeeded--;
+        tickCounter = 0;
+        state = State.WAIT_INPUT_PRECISE;
+    }
+
+    private void doWaitInputPrecise(Minecraft client) {
+        if (tickCounter >= 1) {
+            if (preciseExtractNeeded > 0) {
+                state = State.TAKE_INPUT_PRECISE;
+            } else {
+                // Done with this slot, move to next
+                slotIndex++;
+                state = State.TAKE_INPUT;
+            }
             tickCounter = 0;
         }
     }
@@ -555,39 +642,81 @@ public class CraftingExecutor {
 
     // ==================== Output Box ====================
 
+    /**
+     * Opens the output shulker box. Uses a quick client-side check to skip
+     * opening entirely if there are no final products in the player inventory.
+     * The actual menu-slot mapping is built in {@link #doWaitOutputOpen} once
+     * the container is open, since menu slot indices differ from player
+     * inventory indices.
+     */
     private void doOpenOutput(Minecraft client) {
         if (!checkPlayer(client)) return;
-        outputBoxAttempts++;
+
+        // Quick client-side check: any products in inventory?
+        // If not, skip the open/close cycle entirely.
+        if (!playerHasFinalProduct(client)) {
+            state = State.CHECK_CYCLE;
+            tickCounter = 0;
+            return;
+        }
+
         openBlock(client, outputPos);
         state = State.WAIT_OUTPUT_OPEN;
         tickCounter = 0;
     }
 
+    /**
+     * Once the output shulker box is open, pre-scans the actual menu slots
+     * (indices 27–62, which display the player inventory within the shulker
+     * screen) and records which ones contain the final product. This avoids
+     * the player-inventory-index → menu-slot-index mapping problem.
+     */
     private void doWaitOutputOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
-        if (client.player.containerMenu instanceof ShulkerBoxMenu) {
+        AbstractContainerMenu menu = client.player.containerMenu;
+        int containerSize = getContainerSize(menu);
+        if (containerSize >= 0) {
+            // Build the list of menu slot indices that hold the final product.
+            // Player inventory slots in any storage container start right after
+            // the container's own slots, and there are always 36 of them.
+            productDepositSlots.clear();
+            productDepositIdx = 0;
+            inventoryBeforeDeposit = countItemInInventory(client, finalProductItem);
+            int playerStart = containerSize;        // first player inventory slot
+            int totalSlots = playerStart + 36;      // 36 = player inventory
+            for (int menuSlot = playerStart; menuSlot < totalSlots; menuSlot++) {
+                if (menu.getSlot(menuSlot).getItem().getItem() == finalProductItem) {
+                    productDepositSlots.add(menuSlot); // store direct menu slot index
+                }
+            }
             state = State.DEPOSIT_OUTPUT;
             tickCounter = 0;
-            slotIndex = SHULKER_SLOTS;
             return;
         }
-        if (tickCounter > 20) error("Timed out waiting for output shulker box to open");
+        if (tickCounter > 20) error("Timed out waiting for output container to open");
     }
 
+    /**
+     * Deposits final products into the output box by only iterating over
+     * the pre-scanned menu slot indices that were known to contain the
+     * product, rather than scanning all 63 menu slots. Drastically reduces
+     * the number of packets needed.
+     */
     private void doDepositOutput(Minecraft client) {
         if (!checkPlayer(client)) return;
-        if (!(client.player.containerMenu instanceof ShulkerBoxMenu menu)) {
-            error("Output shulker box not open");
+        AbstractContainerMenu menu = client.player.containerMenu;
+        if (getContainerSize(menu) < 0) {
+            error("Output container not open");
             return;
         }
-        int totalSlots = SHULKER_SLOTS + PLAYER_SLOTS_IN_SHULKER;
-        if (slotIndex < totalSlots) {
-            ItemStack stack = menu.getSlot(slotIndex).getItem();
+
+        if (productDepositIdx < productDepositSlots.size()) {
+            int menuSlot = productDepositSlots.get(productDepositIdx); // direct menu slot index
+            ItemStack stack = menu.getSlot(menuSlot).getItem();
             if (stack.getItem() == finalProductItem) {
-                quickMove(client, menu.containerId, slotIndex);
-                totalCrafted += stack.getCount();
+                quickMove(client, menu.containerId, menuSlot);
             }
-            slotIndex++;
+            productDepositIdx++;
             tickCounter = 0;
             state = State.WAIT_OUTPUT_DEPOSIT;
         } else {
@@ -608,25 +737,32 @@ public class CraftingExecutor {
     /**
      * After closing the output box, check if items were deposited.
      * If the player still has final products, the output box is likely full.
-     * Retry up to 3 times, then give up.
+     * Retry up to 3 times within a single output session, then give up.
      * If no more final products, proceed to CHECK_CYCLE.
      */
     private void doRetryOutput(Minecraft client) {
         if (!checkPlayer(client)) return;
 
         if (playerHasFinalProduct(client)) {
+            outputBoxAttempts++; // count retries, NOT initial opens
             if (outputBoxAttempts >= 3) {
                 client.player.displayClientMessage(
-                    Component.literal("§c/ccraft: Output box appears full after §e" + outputBoxAttempts
-                        + "§c attempts. Stopping."), false);
+                    Component.translatable("client-tools.ccraft.output_box_full", outputBoxAttempts), false);
                 state = State.DONE;
                 return;
             }
-            // Retry opening output box
+            // Retry opening output box (will re-scan inventory)
             state = State.OPEN_OUTPUT;
             tickCounter = 0;
         } else {
-            // Successfully deposited everything — check if we need more cycles
+            // Successfully deposited everything — count what was actually moved
+            int itemsNow = countItemInInventory(client, finalProductItem);
+            int deposited = inventoryBeforeDeposit - itemsNow;
+            if (deposited > 0) {
+                totalCrafted += deposited;
+            }
+            // Reset retry counter for next cycle
+            outputBoxAttempts = 0;
             state = State.CHECK_CYCLE;
             tickCounter = 0;
         }
@@ -647,7 +783,7 @@ public class CraftingExecutor {
         // Safety limit
         if (cycleCount >= MAX_CYCLES) {
             client.player.displayClientMessage(
-                Component.literal("§c/ccraft: Reached cycle limit (§e" + MAX_CYCLES + "§c). Stopping."), false);
+                Component.translatable("client-tools.ccraft.cycle_limit", MAX_CYCLES), false);
             sendDoneMessage(client);
             state = State.DONE;
             return;
@@ -656,6 +792,7 @@ public class CraftingExecutor {
         if (targetCount <= 0) {
             // Infinite mode: loop while source items were found
             if (cycleSourceTaken > 0) {
+                outputBoxAttempts = 0; // reset retry counter for new cycle
                 state = State.OPEN_INPUT;
                 tickCounter = 0;
             } else {
@@ -671,6 +808,7 @@ public class CraftingExecutor {
                 // We have enough — but try to deposit them first if we haven't
                 if (playerHasFinalProduct(client)) {
                     // Still have items to deposit, go back to output
+                    outputBoxAttempts = 0; // reset retry counter for fresh deposit session
                     state = State.OPEN_OUTPUT;
                     tickCounter = 0;
                     return;
@@ -685,13 +823,13 @@ public class CraftingExecutor {
                 // We either took source items this cycle, or we skipped taking
                 // because we already had enough in inventory. Recalc and loop.
                 recalcStepTargets();
+                outputBoxAttempts = 0; // reset retry counter for new cycle
                 state = State.OPEN_INPUT;
                 tickCounter = 0;
             } else {
                 // Input box is truly empty — we tried to take but got nothing
                 client.player.displayClientMessage(
-                    Component.literal("§e/ccraft: Input box exhausted. Made §e"
-                        + finalProductsMade + "§e/§e" + targetCount + "§e products."), false);
+                    Component.translatable("client-tools.ccraft.input_exhausted", finalProductsMade, targetCount), false);
                 sendDoneMessage(client);
                 state = State.DONE;
             }
@@ -700,15 +838,16 @@ public class CraftingExecutor {
 
     private void sendDoneMessage(Minecraft client) {
         if (client.player != null) {
-            String msg;
             if (totalCrafted > 0) {
-                msg = "§aCrafting complete! Deposited §e" + totalCrafted + "§a item(s).";
+                client.player.displayClientMessage(
+                    Component.translatable("client-tools.ccraft.done_deposited", totalCrafted), false);
             } else if (finalProductsMade > 0) {
-                msg = "§aCrafting complete! Made §e" + finalProductsMade + "§a final product(s).";
+                client.player.displayClientMessage(
+                    Component.translatable("client-tools.ccraft.done_made", finalProductsMade), false);
             } else {
-                msg = "§aCrafting complete! Already have enough.";
+                client.player.displayClientMessage(
+                    Component.translatable("client-tools.ccraft.done_enough"), false);
             }
-            client.player.displayClientMessage(Component.literal(msg), false);
         }
     }
 
@@ -728,8 +867,8 @@ public class CraftingExecutor {
         tickCounter = 0;
     }
 
-    private void doWaitClose(Minecraft client, State nextState) {
-        if (tickCounter >= WAIT_TICKS) {
+    private void doWaitClose(Minecraft client, State nextState, int waitTicks) {
+        if (tickCounter >= waitTicks) {
             state = nextState;
             tickCounter = 0;
         }
@@ -745,11 +884,28 @@ public class CraftingExecutor {
         );
     }
 
+    /**
+     * Shift-left-click: moves the entire stack to the appropriate inventory area.
+     */
     private void quickMove(Minecraft client, int containerId, int slot) {
         int stateId = getContainerStateId(client.player.containerMenu);
         client.player.connection.send(
             new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(
                 containerId, stateId, slot, 0,
+                ClickType.QUICK_MOVE, ItemStack.EMPTY, new Int2ObjectArrayMap<>()
+            )
+        );
+    }
+
+    /**
+     * Shift-right-click: moves exactly ONE item to the appropriate inventory area.
+     * Used for precise extraction from a slot that has more items than needed.
+     */
+    private void quickMoveSingle(Minecraft client, int containerId, int slot) {
+        int stateId = getContainerStateId(client.player.containerMenu);
+        client.player.connection.send(
+            new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(
+                containerId, stateId, slot, 1,  // button 1 = right-click
                 ClickType.QUICK_MOVE, ItemStack.EMPTY, new Int2ObjectArrayMap<>()
             )
         );
@@ -788,11 +944,28 @@ public class CraftingExecutor {
         this.state = State.ERROR;
         Minecraft client = Minecraft.getInstance();
         if (client.player != null) {
-            client.player.displayClientMessage(Component.literal("§c/ccraft error: " + msg), false);
+            client.player.displayClientMessage(Component.translatable("client-tools.ccraft.error", msg), false);
         }
     }
 
     // ==================== Static utilities ====================
+
+    /**
+     * Returns the number of container-specific slots for any storage container
+     * (chest, shulker box, barrel, hopper, dispenser, etc.), or -1 if the menu
+     * is not a recognized storage container.
+     *
+     * All vanilla storage containers follow the same layout: the container's own
+     * slots come first (indices 0..N-1), followed by exactly 36 player inventory
+     * slots. So {@code containerSize = totalSlots - 36}.
+     */
+    private static int getContainerSize(AbstractContainerMenu menu) {
+        if (menu == null) return -1;
+        if (menu instanceof CraftingMenu) return -1; // crafting table is handled separately
+        int total = menu.slots.size();
+        if (total <= 36) return -1; // no container-specific slots
+        return total - 36;
+    }
 
     private static int getContainerStateId(net.minecraft.world.inventory.AbstractContainerMenu menu) {
         try {
