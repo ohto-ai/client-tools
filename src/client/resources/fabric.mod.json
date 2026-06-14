@@ -1,34 +1,36 @@
 {
-	"schemaVersion": 1,
-	"id": "client-tools",
-	"version": "${version}",
-	"name": "client-tools",
-	"description": "This is an example description! Tell everyone what your mod is about!",
-	"authors": [
-		"Me!"
-	],
-	"contact": {
-		"homepage": "https://fabricmc.net/",
-		"sources": "https://github.com/FabricMC/fabric-example-mod"
-	},
-	"license": "CC0-1.0",
-	"icon": "assets/client-tools/icon.png",
-	"environment": "client",
-	"entrypoints": {
-		"client": [
-			"indi.ohtoai.tool.client_tools.client.ClientToolsClient"
-		]
-	},
-	"mixins": [
-		{
-			"config": "client-tools.client.mixins.json",
-			"environment": "client"
-		}
-	],
-	"depends": {
-		"fabricloader": ">=0.16.10",
-		"minecraft": "~1.21",
-		"java": ">=21",
-		"fabric-api": "*"
-	}
+    "schemaVersion": 1,
+    "id": "client-tools",
+    "version": "${version}",
+    "name": "Client Tools",
+    "description": "A collection of client-side automation tools: automated crafting chain execution, timed command scheduler, and quick chat sender.",
+    "authors": [
+        "Ohto-Ai"
+    ],
+    "contact": {
+        "homepage": "https://www.curseforge.com/minecraft/mc-mods/client-tools",
+        "sources": "https://github.com/ohto-ai/client-tools",
+        "email": "ohtoai.choo@gmail.com",
+        "issues": "https://github.com/ohto-ai/client-tools/issues"
+    },
+    "license": "MIT",
+    "icon": "assets/client-tools/icon.png",
+    "environment": "client",
+    "entrypoints": {
+        "client": [
+            "indi.ohtoai.tool.client_tools.client.ClientToolsClient"
+        ]
+    },
+    "mixins": [
+        {
+            "config": "client-tools.client.mixins.json",
+            "environment": "client"
+        }
+    ],
+    "depends": {
+        "fabricloader": ">=0.16.10",
+        "minecraft": "~1.21",
+        "java": ">=21",
+        "fabric-api": "*"
+    }
 }
