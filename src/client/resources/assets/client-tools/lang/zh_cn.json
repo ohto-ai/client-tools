@@ -32,6 +32,9 @@
   "client-tools.ccraft.status_missing": "§e缺少参数: %s",
   "client-tools.ccraft.param_not_set": "§7%s: §7(未设置)",
   "client-tools.ccraft.param_set": "§a%s: §e%s",
+  "client-tools.ccraft.show_triggered": "§a已开启方块高亮 (3秒)",
+  "client-tools.ccraft.show_no_positions": "§e没有已设置的坐标可供高亮。",
+
   "client-tools.ccraft.state_cleared": "§a/ccraft 状态已清除。",
   "client-tools.ccraft.missing_params": "§c缺少参数: %s",
   "client-tools.ccraft.not_in_world": "§c未连接到世界。",

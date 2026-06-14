@@ -4,6 +4,7 @@ import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
 import indi.ohtoai.tool.client_tools.client.craft.MaterialPlanner;
@@ -135,6 +136,10 @@ public class CcraftCommand {
                 // /ccraft status
                 .then(literal("status")
                     .executes(ctx -> showStatus(ctx.getSource()))
+                )
+                // /ccraft show
+                .then(literal("show")
+                    .executes(ctx -> showHighlight(ctx.getSource()))
                 )
                 // /ccraft clear
                 .then(literal("clear")
@@ -334,6 +339,16 @@ public class CcraftCommand {
         }
     }
 
+    private static int showHighlight(FabricClientCommandSource source) {
+        if (CcraftState.getInputPos() == null && CcraftState.getOutputPos() == null) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_no_positions"));
+            return 0;
+        }
+        CcraftHighlightRenderer.trigger();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.show_triggered"));
+        return 1;
+    }
+
     private static int clearState(FabricClientCommandSource source) {
         CcraftState.clear();
         source.sendFeedback(Component.translatable("client-tools.ccraft.state_cleared"));
@@ -359,6 +374,8 @@ public class CcraftCommand {
                 source.sendFeedback(Component.translatable("client-tools.ccraft.no_table_found"));
                 return 0;
             }
+            // Persist auto-detected station so highlight can show it
+            CcraftState.setStationPos(station);
             source.sendFeedback(Component.translatable("client-tools.ccraft.auto_detected_table",
                 station.getX(), station.getY(), station.getZ()));
         }
@@ -421,6 +438,8 @@ public class CcraftCommand {
             CraftingExecutor.getInstance().startAuto(productItem, repeatCount, station, input, output, planner);
             source.sendFeedback(Component.translatable("client-tools.ccraft.executing", countLabel));
         }
+        // Show block highlight so the player can visually confirm the positions
+        CcraftHighlightRenderer.trigger();
         return 1;
     }
 

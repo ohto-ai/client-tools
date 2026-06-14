@@ -32,6 +32,9 @@
   "client-tools.ccraft.status_missing": "§eMissing: %s",
   "client-tools.ccraft.param_not_set": "§7%s: §7(not set)",
   "client-tools.ccraft.param_set": "§a%s: §e%s",
+  "client-tools.ccraft.show_triggered": "§aBlock highlight active (3s)",
+  "client-tools.ccraft.show_no_positions": "§eNo positions configured to highlight.",
+
   "client-tools.ccraft.state_cleared": "§a/ccraft state cleared.",
   "client-tools.ccraft.missing_params": "§cMissing parameters: %s",
   "client-tools.ccraft.not_in_world": "§cNot connected to a world.",
