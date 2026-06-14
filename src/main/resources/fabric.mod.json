@@ -1,0 +1,38 @@
+{
+	"schemaVersion": 1,
+	"id": "client-tools",
+	"version": "${version}",
+	"name": "client-tools",
+	"description": "This is an example description! Tell everyone what your mod is about!",
+	"authors": [
+		"Me!"
+	],
+	"contact": {
+		"homepage": "https://fabricmc.net/",
+		"sources": "https://github.com/FabricMC/fabric-example-mod"
+	},
+	"license": "CC0-1.0",
+	"icon": "assets/client-tools/icon.png",
+	"environment": "*",
+	"entrypoints": {
+		"main": [
+			"indi.ohtoai.tool.client_tools.ClientTools"
+		],
+		"client": [
+			"indi.ohtoai.tool.client_tools.client.ClientToolsClient"
+		]
+	},
+	"mixins": [
+		"client-tools.mixins.json",
+		{
+			"config": "client-tools.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.19.3",
+		"minecraft": "~1.21",
+		"java": ">=21",
+		"fabric-api": "*"
+	}
+}
