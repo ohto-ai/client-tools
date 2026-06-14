@@ -155,7 +155,16 @@ public class CcraftState {
         return sb.toString();
     }
 
-    // --- Clear ---
+    // --- Individual clear ---
+
+    public static void clearSourceItem() { ensureLoaded(); sourceItem = null; save(); }
+    public static void clearProductItem() { ensureLoaded(); productItem = null; save(); }
+    public static void clearStationPos() { ensureLoaded(); stationPos = null; save(); }
+    public static void clearInputPos() { ensureLoaded(); inputPos = null; save(); }
+    public static void clearOutputPos() { ensureLoaded(); outputPos = null; save(); }
+    public static void clearRepeatCount() { ensureLoaded(); repeatCount = 1; save(); }
+
+    // --- Clear all ---
 
     public static void clear() {
         ensureLoaded();
@@ -164,6 +173,7 @@ public class CcraftState {
         stationPos = null;
         inputPos = null;
         outputPos = null;
+        repeatCount = 1;
         save();
     }
 

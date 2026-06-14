@@ -61,6 +61,55 @@ public class CcraftCommand {
             return builder.buildFuture();
         };
 
+    /** Suggests common show durations. */
+    private static final SuggestionProvider<FabricClientCommandSource> DURATION_SUGGESTIONS =
+        (ctx, builder) -> {
+            builder.suggest("3s");
+            builder.suggest("5s");
+            builder.suggest("10s");
+            builder.suggest("30s");
+            builder.suggest("1m");
+            builder.suggest("5m");
+            builder.suggest("60t");
+            builder.suggest("120t");
+            builder.suggest("200t");
+            return builder.buildFuture();
+        };
+
+    /** Named colors + common hex values for tab-completion. */
+    private static final SuggestionProvider<FabricClientCommandSource> COLOR_SUGGESTIONS =
+        (ctx, builder) -> {
+            // Named colors
+            builder.suggest("red");
+            builder.suggest("green");
+            builder.suggest("blue");
+            builder.suggest("gold");
+            builder.suggest("yellow");
+            builder.suggest("cyan");
+            builder.suggest("magenta");
+            builder.suggest("white");
+            builder.suggest("orange");
+            builder.suggest("purple");
+            builder.suggest("pink");
+            builder.suggest("lime");
+            builder.suggest("aqua");
+            builder.suggest("navy");
+            builder.suggest("teal");
+            builder.suggest("brown");
+            builder.suggest("gray");
+            builder.suggest("black");
+            // Common hex
+            builder.suggest("FF5555");
+            builder.suggest("55FF55");
+            builder.suggest("5555FF");
+            builder.suggest("FFAA00");
+            builder.suggest("FF55FF");
+            builder.suggest("55FFFF");
+            builder.suggest("FFFF55");
+            builder.suggest("8BAAFF");
+            return builder.buildFuture();
+        };
+
     // --- Registration ---
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
@@ -73,6 +122,9 @@ public class CcraftCommand {
                         .executes(ctx -> setSource(ctx.getSource(),
                             StringArgumentType.getString(ctx, "item")))
                     )
+                    .then(literal("clear")
+                        .executes(ctx -> clearSource(ctx.getSource()))
+                    )
                 )
                 // /ccraft product <item>
                 .then(literal("product")
@@ -80,6 +132,9 @@ public class CcraftCommand {
                         .suggests(ITEM_SUGGESTIONS)
                         .executes(ctx -> setProduct(ctx.getSource(),
                             StringArgumentType.getString(ctx, "item")))
+                    )
+                    .then(literal("clear")
+                        .executes(ctx -> clearProduct(ctx.getSource()))
                     )
                 )
                 // /ccraft station (aimed)
@@ -98,6 +153,9 @@ public class CcraftCommand {
                             )
                         )
                     )
+                    .then(literal("clear")
+                        .executes(ctx -> clearStation(ctx.getSource()))
+                    )
                 )
                 // /ccraft input (aimed)
                 .then(literal("input")
@@ -114,6 +172,9 @@ public class CcraftCommand {
                                     IntegerArgumentType.getInteger(ctx, "z")))
                             )
                         )
+                    )
+                    .then(literal("clear")
+                        .executes(ctx -> clearInput(ctx.getSource()))
                     )
                 )
                 // /ccraft output (aimed)
@@ -132,14 +193,43 @@ public class CcraftCommand {
                             )
                         )
                     )
+                    .then(literal("clear")
+                        .executes(ctx -> clearOutput(ctx.getSource()))
+                    )
                 )
                 // /ccraft status
                 .then(literal("status")
                     .executes(ctx -> showStatus(ctx.getSource()))
                 )
-                // /ccraft show
+                // /ccraft show [duration] [station_color] [input_color] [output_color]
                 .then(literal("show")
                     .executes(ctx -> showHighlight(ctx.getSource()))
+                    .then(argument("duration", StringArgumentType.word())
+                        .suggests(DURATION_SUGGESTIONS)
+                        .executes(ctx -> showHighlight(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "duration")))
+                        .then(argument("station_color", StringArgumentType.word())
+                            .suggests(COLOR_SUGGESTIONS)
+                            .executes(ctx -> showHighlight(ctx.getSource(),
+                                StringArgumentType.getString(ctx, "duration"),
+                                StringArgumentType.getString(ctx, "station_color")))
+                            .then(argument("input_color", StringArgumentType.word())
+                                .suggests(COLOR_SUGGESTIONS)
+                                .executes(ctx -> showHighlight(ctx.getSource(),
+                                    StringArgumentType.getString(ctx, "duration"),
+                                    StringArgumentType.getString(ctx, "station_color"),
+                                    StringArgumentType.getString(ctx, "input_color")))
+                                .then(argument("output_color", StringArgumentType.word())
+                                    .suggests(COLOR_SUGGESTIONS)
+                                    .executes(ctx -> showHighlight(ctx.getSource(),
+                                        StringArgumentType.getString(ctx, "duration"),
+                                        StringArgumentType.getString(ctx, "station_color"),
+                                        StringArgumentType.getString(ctx, "input_color"),
+                                        StringArgumentType.getString(ctx, "output_color")))
+                                )
+                            )
+                        )
+                    )
                 )
                 // /ccraft clear
                 .then(literal("clear")
@@ -157,6 +247,9 @@ public class CcraftCommand {
                         })
                         .executes(ctx -> setCount(ctx.getSource(),
                             StringArgumentType.getString(ctx, "value")))
+                    )
+                    .then(literal("clear")
+                        .executes(ctx -> clearCount(ctx.getSource()))
                     )
                 )
                 // /ccraft stop
@@ -185,6 +278,129 @@ public class CcraftCommand {
         if (id == null) id = ResourceLocation.tryParse("minecraft:" + input);
         if (id == null) return null;
         return BuiltInRegistries.ITEM.get(id);
+    }
+
+    // ==================== Duration parsing ====================
+
+    /**
+     * Parses a duration string into ticks.
+     * Supported formats:
+     * <ul>
+     *   <li>{@code "3s"} or {@code "3"} — seconds (×20)</li>
+     *   <li>{@code "30t"} — raw ticks</li>
+     *   <li>{@code "1m"} — minutes (×1200)</li>
+     *   <li>{@code "500ms"} — milliseconds (/50, min 1 tick)</li>
+     * </ul>
+     *
+     * @return ticks, or -1 if unparseable
+     */
+    private static int parseDuration(String input) {
+        input = input.trim().toLowerCase();
+        if (input.isEmpty()) return -1;
+
+        try {
+            if (input.endsWith("ms")) {
+                int ms = Integer.parseInt(input.substring(0, input.length() - 2));
+                return Math.max(1, ms / 50);
+            }
+            if (input.endsWith("s")) {
+                return Integer.parseInt(input.substring(0, input.length() - 1)) * 20;
+            }
+            if (input.endsWith("t")) {
+                return Integer.parseInt(input.substring(0, input.length() - 1));
+            }
+            if (input.endsWith("m")) {
+                return Integer.parseInt(input.substring(0, input.length() - 1)) * 60 * 20;
+            }
+            // Plain number: treat as seconds
+            return Integer.parseInt(input) * 20;
+        } catch (NumberFormatException e) {
+            return -1;
+        }
+    }
+
+    /** Convert duration ticks to a human-readable string for feedback. */
+    private static String formatDuration(int ticks) {
+        if (ticks % 1200 == 0) return (ticks / 1200) + "m";
+        if (ticks % 20 == 0) return (ticks / 20) + "s";
+        return ticks + "t";
+    }
+
+    // ==================== Color parsing ====================
+
+    private static final Map<String, Integer> NAMED_COLORS = Map.ofEntries(
+        Map.entry("red",     0xFF5555),
+        Map.entry("green",   0x55FF55),
+        Map.entry("blue",    0x5555FF),
+        Map.entry("gold",    0xFFAA00),
+        Map.entry("yellow",  0xFFFF55),
+        Map.entry("cyan",    0x55FFFF),
+        Map.entry("magenta", 0xFF55FF),
+        Map.entry("white",   0xFFFFFF),
+        Map.entry("black",   0x000000),
+        Map.entry("gray",    0x888888),
+        Map.entry("grey",    0x888888),
+        Map.entry("orange",  0xFF8800),
+        Map.entry("purple",  0xAA55FF),
+        Map.entry("pink",    0xFF88AA),
+        Map.entry("lime",    0x88FF00),
+        Map.entry("aqua",    0x00FFFF),
+        Map.entry("navy",    0x000080),
+        Map.entry("teal",    0x008080),
+        Map.entry("brown",   0x8B4513)
+    );
+
+    /**
+     * Parses a color string into an RGB24 integer.
+     * Supported formats:
+     * <ul>
+     *   <li>Named: {@code "red"}, {@code "green"}, {@code "blue"}, {@code "gold"}, etc.</li>
+     *   <li>Hex: {@code "FF5555"}, {@code "0xFF5555"}, {@code "#FF5555"}</li>
+     *   <li>Shorthand hex: {@code "F00"} → {@code FF0000}</li>
+     * </ul>
+     *
+     * @return RGB24 color (0xRRGGBB), or -1 if unparseable
+     */
+    private static int parseColor(String input) {
+        if (input == null || input.isEmpty()) return -1;
+
+        String lower = input.trim().toLowerCase();
+
+        // Named color
+        if (NAMED_COLORS.containsKey(lower)) {
+            return NAMED_COLORS.get(lower);
+        }
+
+        // Strip prefixes: #, 0x, 0X
+        String hex = lower;
+        if (hex.startsWith("#")) {
+            hex = hex.substring(1);
+        } else if (hex.startsWith("0x")) {
+            hex = hex.substring(2);
+        }
+
+        // Shorthand hex: "F00" → "FF0000"
+        if (hex.length() == 3) {
+            StringBuilder sb = new StringBuilder(6);
+            for (char c : hex.toCharArray()) {
+                sb.append(c).append(c);
+            }
+            hex = sb.toString();
+        }
+
+        if (hex.length() == 6) {
+            try {
+                return Integer.parseInt(hex, 16);
+            } catch (NumberFormatException ignored) {
+            }
+        }
+
+        return -1;
+    }
+
+    /** Convert an RGB24 color to a #RRGGBB string for feedback. */
+    private static String formatColor(int color) {
+        return String.format("#%06X", color & 0xFFFFFF);
     }
 
     // ==================== Individual subcommands ====================
@@ -268,6 +484,44 @@ public class CcraftCommand {
         return 1;
     }
 
+    // ==================== Individual clear subcommands ====================
+
+    private static int clearSource(FabricClientCommandSource source) {
+        CcraftState.clearSourceItem();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.source_cleared"));
+        return 1;
+    }
+
+    private static int clearProduct(FabricClientCommandSource source) {
+        CcraftState.clearProductItem();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.product_cleared"));
+        return 1;
+    }
+
+    private static int clearStation(FabricClientCommandSource source) {
+        CcraftState.clearStationPos();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.station_cleared"));
+        return 1;
+    }
+
+    private static int clearInput(FabricClientCommandSource source) {
+        CcraftState.clearInputPos();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.input_cleared"));
+        return 1;
+    }
+
+    private static int clearOutput(FabricClientCommandSource source) {
+        CcraftState.clearOutputPos();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.output_cleared"));
+        return 1;
+    }
+
+    private static int clearCount(FabricClientCommandSource source) {
+        CcraftState.clearRepeatCount();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.count_cleared"));
+        return 1;
+    }
+
     // ==================== Status / Clear ====================
 
     private static int showStatus(FabricClientCommandSource source) {
@@ -315,7 +569,9 @@ public class CcraftCommand {
         } else {
             source.sendFeedback(Component.translatable("client-tools.ccraft.status_target_finite", count));
         }
-        if (CcraftState.isReady()) {
+        if (executor.isRunning()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_stop_hint"));
+        } else if (CcraftState.isReady()) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.status_ready"));
         } else {
             source.sendFeedback(Component.translatable("client-tools.ccraft.status_missing", CcraftState.getMissingParams()));
@@ -339,15 +595,113 @@ public class CcraftCommand {
         }
     }
 
+    // ==================== Show (highlight) ====================
+
+    /** Show with all defaults: 3s, default colors. */
     private static int showHighlight(FabricClientCommandSource source) {
+        return doShowHighlight(source,
+            CcraftHighlightRenderer.DEFAULT_DURATION_TICKS,
+            CcraftHighlightRenderer.DEFAULT_STATION_COLOR,
+            CcraftHighlightRenderer.DEFAULT_INPUT_COLOR,
+            CcraftHighlightRenderer.DEFAULT_OUTPUT_COLOR);
+    }
+
+    /** Show with custom duration, default colors. */
+    private static int showHighlight(FabricClientCommandSource source, String durationStr) {
+        int ticks = parseDuration(durationStr);
+        if (ticks < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
+            return 0;
+        }
+        return doShowHighlight(source, ticks,
+            CcraftHighlightRenderer.DEFAULT_STATION_COLOR,
+            CcraftHighlightRenderer.DEFAULT_INPUT_COLOR,
+            CcraftHighlightRenderer.DEFAULT_OUTPUT_COLOR);
+    }
+
+    /** Show with custom duration + station color, default input/output colors. */
+    private static int showHighlight(FabricClientCommandSource source, String durationStr, String stationColorStr) {
+        int ticks = parseDuration(durationStr);
+        if (ticks < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
+            return 0;
+        }
+        int stationColor = parseColor(stationColorStr);
+        if (stationColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", stationColorStr));
+            return 0;
+        }
+        return doShowHighlight(source, ticks, stationColor,
+            CcraftHighlightRenderer.DEFAULT_INPUT_COLOR,
+            CcraftHighlightRenderer.DEFAULT_OUTPUT_COLOR);
+    }
+
+    /** Show with custom duration + station + input colors, default output color. */
+    private static int showHighlight(FabricClientCommandSource source, String durationStr,
+                                      String stationColorStr, String inputColorStr) {
+        int ticks = parseDuration(durationStr);
+        if (ticks < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
+            return 0;
+        }
+        int stationColor = parseColor(stationColorStr);
+        if (stationColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", stationColorStr));
+            return 0;
+        }
+        int inputColor = parseColor(inputColorStr);
+        if (inputColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", inputColorStr));
+            return 0;
+        }
+        return doShowHighlight(source, ticks, stationColor, inputColor,
+            CcraftHighlightRenderer.DEFAULT_OUTPUT_COLOR);
+    }
+
+    /** Show with custom duration + all three colors. */
+    private static int showHighlight(FabricClientCommandSource source, String durationStr,
+                                      String stationColorStr, String inputColorStr, String outputColorStr) {
+        int ticks = parseDuration(durationStr);
+        if (ticks < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
+            return 0;
+        }
+        int stationColor = parseColor(stationColorStr);
+        if (stationColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", stationColorStr));
+            return 0;
+        }
+        int inputColor = parseColor(inputColorStr);
+        if (inputColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", inputColorStr));
+            return 0;
+        }
+        int outputColor = parseColor(outputColorStr);
+        if (outputColor < 0) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.show_color_invalid", outputColorStr));
+            return 0;
+        }
+        return doShowHighlight(source, ticks, stationColor, inputColor, outputColor);
+    }
+
+    /** Core implementation: triggers highlight and sends feedback. */
+    private static int doShowHighlight(FabricClientCommandSource source, int ticks,
+                                        int stationColor, int inputColor, int outputColor) {
         if (CcraftState.getInputPos() == null && CcraftState.getOutputPos() == null) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.show_no_positions"));
             return 0;
         }
-        CcraftHighlightRenderer.trigger();
-        source.sendFeedback(Component.translatable("client-tools.ccraft.show_triggered"));
+        CcraftHighlightRenderer.trigger(ticks, stationColor, inputColor, outputColor);
+        String durStr = formatDuration(ticks);
+        String sCol = formatColor(stationColor);
+        String iCol = formatColor(inputColor);
+        String oCol = formatColor(outputColor);
+        source.sendFeedback(Component.translatable("client-tools.ccraft.show_triggered_custom",
+            durStr, sCol, iCol, oCol));
         return 1;
     }
+
+    // ==================== Clear all ====================
 
     private static int clearState(FabricClientCommandSource source) {
         CcraftState.clear();

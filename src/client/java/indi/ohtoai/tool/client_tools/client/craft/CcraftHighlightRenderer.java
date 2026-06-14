@@ -31,26 +31,57 @@ import java.util.*;
  * {@link WorldRenderContext#consumers()} is available for text and icon
  * rendering.
  *
- * <p>Colors:
+ * <p>Default colors:
  * <ul>
- *   <li>Station — green (crafting table icon)</li>
- *   <li>Input chest — blue (raw material icons, auto-derived from recipes)</li>
- *   <li>Output chest — gold (product item icon)</li>
+ *   <li>Station — green ({@code #55FF55})</li>
+ *   <li>Input chest — blue ({@code #8BAAFF})</li>
+ *   <li>Output chest — gold ({@code #FFAA00})</li>
  * </ul>
+ * Colors and duration can be customized via {@link #trigger(int, int, int, int)}.
  */
 public class CcraftHighlightRenderer {
 
-    private static final int DURATION_TICKS = 60; // 3 seconds at 20 TPS
+    // ---- Defaults ----
+    public static final int DEFAULT_DURATION_TICKS = 60; // 3 seconds at 20 TPS
+    public static final int DEFAULT_STATION_COLOR = 0x55FF55; // green
+    public static final int DEFAULT_INPUT_COLOR = 0x8BAAFF;   // blue
+    public static final int DEFAULT_OUTPUT_COLOR = 0xFFAA00;  // gold
+
     private static final int MAX_MATERIAL_ICONS = 8; // cap to avoid visual clutter
     private static int ticksRemaining = 0;
+
+    // ---- Customizable colors ----
+    private static int stationColor = DEFAULT_STATION_COLOR;
+    private static int inputColor = DEFAULT_INPUT_COLOR;
+    private static int outputColor = DEFAULT_OUTPUT_COLOR;
 
     private CcraftHighlightRenderer() {}
 
     // ==================== Public API ====================
 
-    /** Start or restart the 3-second highlight. */
+    /** Start or restart the highlight with default duration and colors. */
     public static void trigger() {
-        ticksRemaining = DURATION_TICKS;
+        trigger(DEFAULT_DURATION_TICKS, DEFAULT_STATION_COLOR, DEFAULT_INPUT_COLOR, DEFAULT_OUTPUT_COLOR);
+    }
+
+    /** Start or restart the highlight with a custom duration and default colors. */
+    public static void trigger(int durationTicks) {
+        trigger(durationTicks, DEFAULT_STATION_COLOR, DEFAULT_INPUT_COLOR, DEFAULT_OUTPUT_COLOR);
+    }
+
+    /**
+     * Start or restart the highlight with a custom duration and colors.
+     *
+     * @param durationTicks how many ticks to display (20 ticks = 1 second)
+     * @param stationColor  ARGB color for the station wireframe/label
+     * @param inputColor    ARGB color for the input chest wireframe/label
+     * @param outputColor   ARGB color for the output chest wireframe/label
+     */
+    public static void trigger(int durationTicks, int stationColor, int inputColor, int outputColor) {
+        ticksRemaining = Math.max(1, durationTicks);
+        CcraftHighlightRenderer.stationColor = stationColor;
+        CcraftHighlightRenderer.inputColor = inputColor;
+        CcraftHighlightRenderer.outputColor = outputColor;
     }
 
     /** Immediately stop highlighting. */
@@ -68,6 +99,11 @@ public class CcraftHighlightRenderer {
         if (ticksRemaining > 0) {
             ticksRemaining--;
         }
+    }
+
+    /** Get remaining ticks for display purposes. */
+    public static int getTicksRemaining() {
+        return ticksRemaining;
     }
 
     // ==================== Render Entry Point ====================
@@ -97,35 +133,53 @@ public class CcraftHighlightRenderer {
         BlockPos input = CcraftState.getInputPos();
         BlockPos output = CcraftState.getOutputPos();
 
-        // --- Station (green, crafting table icon) ---
+        // Pre-compute RGB float components from stored ARGB colors
+        float[] stationRGB = colorToRGB(stationColor);
+        float[] inputRGB = colorToRGB(inputColor);
+        float[] outputRGB = colorToRGB(outputColor);
+
+        // --- Station ---
         if (station != null) {
-            renderWireframe(poseStack, station, camPos, 0.0f, 1.0f, 0.0f, 0.8f);
+            renderWireframe(poseStack, station, camPos, stationRGB[0], stationRGB[1], stationRGB[2], 0.8f);
             renderIcons(poseStack, station, camPos, camera, client, consumers,
                 List.of(new ItemStack(Items.CRAFTING_TABLE)));
             renderLabel(poseStack, station, camPos, camera, client, consumers,
-                "Crafting Station", 0xFF55FF55);
+                "Crafting Station", stationColor | 0xFF000000);
         }
 
-        // --- Input chest (blue, material icons) ---
+        // --- Input chest ---
         if (input != null) {
             List<ItemStack> inputIcons = getInputMaterialIcons(client);
-            renderWireframe(poseStack, input, camPos, 0.3f, 0.5f, 1.0f, 0.8f);
+            renderWireframe(poseStack, input, camPos, inputRGB[0], inputRGB[1], inputRGB[2], 0.8f);
             renderIcons(poseStack, input, camPos, camera, client, consumers, inputIcons);
             renderLabel(poseStack, input, camPos, camera, client, consumers,
-                "Input Chest", 0xFF8BAAFF);
+                "Input Chest", inputColor | 0xFF000000);
         }
 
-        // --- Output chest (gold, product item icon) ---
+        // --- Output chest ---
         if (output != null) {
             Item productItem = CcraftState.getProductItem();
             List<ItemStack> outputIcons = productItem != null
                 ? List.of(new ItemStack(productItem))
                 : List.of(new ItemStack(Items.CHEST));
-            renderWireframe(poseStack, output, camPos, 1.0f, 0.6f, 0.0f, 0.8f);
+            renderWireframe(poseStack, output, camPos, outputRGB[0], outputRGB[1], outputRGB[2], 0.8f);
             renderIcons(poseStack, output, camPos, camera, client, consumers, outputIcons);
             renderLabel(poseStack, output, camPos, camera, client, consumers,
-                "Output Chest", 0xFFFFAA00);
+                "Output Chest", outputColor | 0xFF000000);
         }
+    }
+
+    // ==================== Color helpers ====================
+
+    /**
+     * Convert an RGB24 integer to a float[3] with components in [0, 1].
+     */
+    private static float[] colorToRGB(int color) {
+        return new float[] {
+            ((color >> 16) & 0xFF) / 255.0f,
+            ((color >> 8) & 0xFF) / 255.0f,
+            (color & 0xFF) / 255.0f
+        };
     }
 
     // ==================== Material Icon Resolution ====================
