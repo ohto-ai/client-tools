@@ -26,9 +26,9 @@ public class CchatCommand {
 
         if (client.player != null && client.player.connection != null) {
             client.player.connection.sendChat(message);
-            source.sendFeedback(Component.literal("§aSent: " + message));
+            source.sendFeedback(Component.translatable("client-tools.cchat.sent", message));
         } else {
-            source.sendFeedback(Component.literal("§cCannot send chat: not connected to a server."));
+            source.sendFeedback(Component.translatable("client-tools.cchat.not_connected"));
         }
 
         return 1;

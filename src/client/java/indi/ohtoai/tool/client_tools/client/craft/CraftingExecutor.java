@@ -9,6 +9,7 @@ import net.minecraft.world.InteractionHand;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
 import net.minecraft.world.inventory.CraftingMenu;
+import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.level.block.Blocks;
@@ -16,7 +17,9 @@ import net.minecraft.world.phys.BlockHitResult;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Tick-based state machine that executes a crafting chain by interacting
@@ -49,7 +52,7 @@ public class CraftingExecutor {
     private enum State {
         IDLE,
         // Input box
-        OPEN_INPUT, WAIT_INPUT_OPEN, TAKE_INPUT, WAIT_INPUT_TAKE,
+        OPEN_INPUT, WAIT_INPUT_OPEN, SCAN_INPUT, TAKE_INPUT, WAIT_INPUT_TAKE,
         TAKE_INPUT_PRECISE, WAIT_INPUT_PRECISE,
         CLOSE_INPUT, WAIT_INPUT_CLOSE,
         // Crafting table
@@ -63,6 +66,8 @@ public class CraftingExecutor {
         RETRY_OUTPUT,
         // Cycle control
         CHECK_CYCLE,
+        WAIT_INPUT_RETRY,
+        WAIT_OUTPUT_RETRY,
         DONE, ERROR
     }
 
@@ -91,19 +96,31 @@ public class CraftingExecutor {
     // Cycle tracking
     private int cycleSourceTaken = 0;        // how many source items taken in current cycle
     private int cycleCount = 0;              // how many full cycles have been completed
-    private static final int MAX_CYCLES = 100; // safety limit
+    private int inputMissingRetries = 0;     // consecutive times input box failed to open
+    private int outputMissingRetries = 0;    // consecutive times output box failed to open
 
     // Precise extraction (for partial stacks)
     private int preciseExtractNeeded = 0;    // remaining single items to extract from current slot
     private int preciseExtractSlot = -1;     // shulker slot being precisely extracted
+    private Item preciseExtractSlotItem;     // item type being precisely extracted (auto mode)
 
     // Targeted deposit (pre-scanned menu slots, populated after container opens)
     private final List<Integer> productDepositSlots = new ArrayList<>(); // menu slot indices (27-62) holding product
     private int productDepositIdx = 0;       // current index into productDepositSlots
     private int inventoryBeforeDeposit = 0;  // snapshot taken before opening output box
 
-    private static final int WAIT_TICKS = 2;       // reduced from 4; safe for both local and remote servers
-    private static final int CLOSE_WAIT_TICKS = 1;  // minimal wait for close packets
+    // Auto-detect mode (multi-source MaterialPlan)
+    private boolean autoMode = false;
+    private MaterialPlanner planner;
+    private MaterialPlanner.MaterialPlan currentPlan;
+    private Map<Item, Integer> sourceItemsNeeded;  // item → total count to take this cycle
+    private Map<Item, Integer> sourceItemsTaken;   // item → count already taken
+
+    private static final int WAIT_TICKS = 2;              // reduced from 4; safe for both local and remote servers
+    private static final int CLOSE_WAIT_TICKS = 1;         // minimal wait for close packets
+    private static final int CONTAINER_OPEN_TIMEOUT = 60;  // 3s — generous for high-latency servers
+    private static final int MAX_MISSING_RETRIES = 3;      // retry 3× if container disappeared
+    private static final int RETRY_DELAY_TICKS = 40;       // ~2s delay between retries
 
     private CraftingExecutor() {}
 
@@ -115,12 +132,44 @@ public class CraftingExecutor {
     }
 
     /**
-     * Start executing a crafting chain.
+     * Start executing a crafting chain (legacy mode with fixed source item).
      */
     public void start(List<RecipeChainAnalyzer.RecipeStep> steps, BlockPos stationPos,
                       BlockPos inputPos, BlockPos outputPos, Item finalProductItem,
                       int targetCount) {
+        resetCommon(stationPos, inputPos, outputPos, finalProductItem, targetCount);
+        this.autoMode = false;
         this.steps = steps;
+        this.planner = null;
+        this.currentPlan = null;
+        this.sourceItemsNeeded = null;
+        this.sourceItemsTaken = null;
+
+        calculateMaterialPlan();
+        this.state = State.OPEN_INPUT;
+    }
+
+    /**
+     * Start executing in auto-detect mode — the input chest will be scanned
+     * on each cycle and a multi-source {@link MaterialPlanner.MaterialPlan}
+     * will be built automatically.
+     */
+    public void startAuto(Item finalProductItem, int targetCount,
+                          BlockPos stationPos, BlockPos inputPos, BlockPos outputPos,
+                          MaterialPlanner planner) {
+        resetCommon(stationPos, inputPos, outputPos, finalProductItem, targetCount);
+        this.autoMode = true;
+        this.planner = planner;
+        this.steps = null;
+        this.currentPlan = null;
+        this.sourceItemsNeeded = null;
+        this.sourceItemsTaken = null;
+
+        this.state = State.OPEN_INPUT;
+    }
+
+    private void resetCommon(BlockPos stationPos, BlockPos inputPos, BlockPos outputPos,
+                             Item finalProductItem, int targetCount) {
         this.stationPos = stationPos;
         this.inputPos = inputPos;
         this.outputPos = outputPos;
@@ -136,15 +185,15 @@ public class CraftingExecutor {
         this.sourceItemsToTake = -1;
         this.cycleSourceTaken = 0;
         this.cycleCount = 0;
+        this.inputMissingRetries = 0;
+        this.outputMissingRetries = 0;
         this.preciseExtractNeeded = 0;
         this.preciseExtractSlot = -1;
+        this.preciseExtractSlotItem = null;
         this.productDepositSlots.clear();
         this.productDepositIdx = 0;
         this.inventoryBeforeDeposit = 0;
         this.errorMessage = null;
-
-        calculateMaterialPlan();
-        this.state = State.OPEN_INPUT;
     }
 
     /** Stops the executor immediately. */
@@ -170,6 +219,7 @@ public class CraftingExecutor {
             // Input box
             case OPEN_INPUT -> doOpenInput(client);
             case WAIT_INPUT_OPEN -> doWaitInputOpen(client);
+            case SCAN_INPUT -> doScanInput(client);
             case TAKE_INPUT -> doTakeInput(client);
             case WAIT_INPUT_TAKE -> doWaitInputTake(client);
             case TAKE_INPUT_PRECISE -> doTakeInputPrecise(client);
@@ -197,6 +247,8 @@ public class CraftingExecutor {
             case RETRY_OUTPUT -> doRetryOutput(client);
             // Cycle control
             case CHECK_CYCLE -> doCheckCycle(client);
+            case WAIT_INPUT_RETRY -> doWaitInputRetry(client);
+            case WAIT_OUTPUT_RETRY -> doWaitOutputRetry(client);
             default -> {}
         }
     }
@@ -205,8 +257,49 @@ public class CraftingExecutor {
         return state != State.IDLE && state != State.DONE && state != State.ERROR;
     }
 
+    public boolean isDone() {
+        return state == State.DONE;
+    }
+
+    public boolean isError() {
+        return state == State.ERROR;
+    }
+
     public String getErrorMessage() {
         return errorMessage;
+    }
+
+    public int getFinalProductsMade() {
+        return finalProductsMade;
+    }
+
+    public int getTotalCrafted() {
+        return totalCrafted;
+    }
+
+    public int getCycleCount() {
+        return cycleCount;
+    }
+
+    public int getTargetCount() {
+        return targetCount;
+    }
+
+    public int getCurrentStepIndex() {
+        return currentStep;
+    }
+
+    public int getCurrentStepProgress() {
+        return currentStepProduced;
+    }
+
+    public int getSourceTaken() {
+        return cycleSourceTaken;
+    }
+
+    public int getStepCount() {
+        if (autoMode && currentPlan != null) return currentPlan.operations.size();
+        return steps != null ? steps.size() : 0;
     }
 
     // ==================== Material Planning ====================
@@ -376,7 +469,13 @@ public class CraftingExecutor {
     private void doWaitInputOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
         if (getContainerSize(client.player.containerMenu) >= 0) {
-            if (sourceItemsToTake == 0) {
+            // Input box opened successfully — reset missing counter
+            inputMissingRetries = 0;
+            if (autoMode) {
+                // Auto-detect mode: scan chest contents first, then build plan
+                state = State.SCAN_INPUT;
+                tickCounter = 0;
+            } else if (sourceItemsToTake == 0) {
                 // Nothing needed this cycle — close immediately
                 state = State.CLOSE_INPUT;
             } else {
@@ -386,7 +485,95 @@ public class CraftingExecutor {
             tickCounter = 0;
             return;
         }
-        if (tickCounter > 20) error("Timed out waiting for input container to open");
+        if (tickCounter > CONTAINER_OPEN_TIMEOUT) {
+            if (targetCount <= 0) {
+                // Infinite mode: input box may be temporarily gone (being replaced by unpacker).
+                // Increment the missing counter and wait before retrying.
+                inputMissingRetries++;
+                state = State.WAIT_INPUT_RETRY;
+                tickCounter = 0;
+            } else {
+                error("Timed out waiting for input container to open");
+            }
+        }
+    }
+
+    /**
+     * Auto-mode: scan the input chest contents and build a multi-source
+     * MaterialPlan. This runs once per cycle right after the input box opens.
+     * Results are stored in {@link #currentPlan}, {@link #sourceItemsNeeded},
+     * and {@link #sourceItemsTaken} for use by the take/craft phases.
+     */
+    private void doScanInput(Minecraft client) {
+        if (!checkPlayer(client)) return;
+        AbstractContainerMenu menu = client.player.containerMenu;
+        int containerSize = getContainerSize(menu);
+        if (containerSize < 0) {
+            error("Input container not open");
+            return;
+        }
+
+        // Scan all container slots and build a chest-items map
+        Map<Item, Integer> chestItems = new HashMap<>();
+        for (int i = 0; i < containerSize; i++) {
+            ItemStack stack = menu.getSlot(i).getItem();
+            if (!stack.isEmpty()) {
+                chestItems.merge(stack.getItem(), stack.getCount(), Integer::sum);
+            }
+        }
+
+        if (chestItems.isEmpty()) {
+            // Chest is empty — nothing to do this cycle
+            cycleSourceTaken = 0;
+            sourceItemsNeeded = null;
+            sourceItemsTaken = null;
+            currentPlan = null;
+            state = State.CLOSE_INPUT;
+            tickCounter = 0;
+            return;
+        }
+
+        // Build the material plan
+        currentPlan = planner.buildPlan(finalProductItem, targetCount, chestItems);
+        if (currentPlan == null || currentPlan.isEmpty()) {
+            // No craftable path found from chest items
+            cycleSourceTaken = 0;
+            sourceItemsNeeded = null;
+            sourceItemsTaken = null;
+            state = State.CLOSE_INPUT;
+            tickCounter = 0;
+            return;
+        }
+
+        // Initialize take tracking
+        sourceItemsNeeded = new HashMap<>(currentPlan.takeItems);
+        sourceItemsTaken = new HashMap<>();
+
+        // Pre-count items already in player inventory (from previous cycles)
+        cycleSourceTaken = 0;
+        for (var entry : sourceItemsNeeded.entrySet()) {
+            int alreadyInInv = countItemInInventory(client, entry.getKey());
+            int effectiveNeed = Math.max(0, entry.getValue() - alreadyInInv);
+            if (effectiveNeed < entry.getValue()) {
+                sourceItemsNeeded.put(entry.getKey(), effectiveNeed);
+            }
+        }
+
+        // Check if we actually need anything from the chest
+        boolean needAnything = false;
+        for (int needed : sourceItemsNeeded.values()) {
+            if (needed > 0) { needAnything = true; break; }
+        }
+
+        if (!needAnything) {
+            // Everything needed is already in inventory
+            state = State.CLOSE_INPUT;
+            tickCounter = 0;
+        } else {
+            state = State.TAKE_INPUT;
+            slotIndex = 0;
+            tickCounter = 0;
+        }
     }
 
     /**
@@ -407,10 +594,20 @@ public class CraftingExecutor {
             return;
         }
 
+        if (autoMode) {
+            doTakeInputAuto(client, menu, containerSize);
+        } else {
+            doTakeInputLegacy(client, menu, containerSize);
+        }
+    }
+
+    /**
+     * Legacy single-source-item extraction.
+     */
+    private void doTakeInputLegacy(Minecraft client, AbstractContainerMenu menu, int containerSize) {
         Item sourceItem = steps.get(0).fromItem();
 
         if (slotIndex < containerSize) {
-            // Check if we've already taken enough (finite mode only)
             if (sourceItemsToTake > 0 && cycleSourceTaken >= sourceItemsToTake) {
                 state = State.CLOSE_INPUT;
                 tickCounter = 0;
@@ -423,14 +620,11 @@ public class CraftingExecutor {
                 int need = sourceItemsToTake > 0 ? sourceItemsToTake - cycleSourceTaken : Integer.MAX_VALUE;
 
                 if (need < stackCount) {
-                    // Partial stack: need fewer items than this slot holds
-                    // Use precise single-item extraction
                     preciseExtractNeeded = need;
                     preciseExtractSlot = slotIndex;
                     state = State.TAKE_INPUT_PRECISE;
                     tickCounter = 0;
                 } else {
-                    // Take the entire stack
                     quickMove(client, menu.containerId, slotIndex);
                     cycleSourceTaken += stackCount;
                     slotIndex++;
@@ -443,7 +637,68 @@ public class CraftingExecutor {
                 state = State.WAIT_INPUT_TAKE;
             }
         } else {
-            // Scanned all container slots
+            state = State.CLOSE_INPUT;
+            tickCounter = 0;
+        }
+    }
+
+    /**
+     * Auto-mode multi-item extraction: take items matching any entry in
+     * {@link #sourceItemsNeeded} until all needed counts are satisfied
+     * or all slots have been scanned.
+     */
+    private void doTakeInputAuto(Minecraft client, AbstractContainerMenu menu, int containerSize) {
+        if (slotIndex < containerSize) {
+            // Check if all needed items are satisfied
+            boolean allDone = true;
+            for (var entry : sourceItemsNeeded.entrySet()) {
+                int taken = sourceItemsTaken.getOrDefault(entry.getKey(), 0);
+                if (taken < entry.getValue()) {
+                    allDone = false;
+                    break;
+                }
+            }
+            if (allDone) {
+                state = State.CLOSE_INPUT;
+                tickCounter = 0;
+                return;
+            }
+
+            ItemStack stack = menu.getSlot(slotIndex).getItem();
+            if (!stack.isEmpty()) {
+                Item item = stack.getItem();
+                int needed = sourceItemsNeeded.getOrDefault(item, -1);
+                if (needed > 0) {
+                    int taken = sourceItemsTaken.getOrDefault(item, 0);
+                    int remaining = needed - taken;
+                    if (remaining > 0) {
+                        int stackCount = stack.getCount();
+                        if (remaining < stackCount) {
+                            // Partial stack extraction
+                            preciseExtractNeeded = remaining;
+                            preciseExtractSlot = slotIndex;
+                            preciseExtractSlotItem = item;
+                            state = State.TAKE_INPUT_PRECISE;
+                            tickCounter = 0;
+                            return;
+                        } else {
+                            // Take entire stack
+                            quickMove(client, menu.containerId, slotIndex);
+                            sourceItemsTaken.merge(item, stackCount, Integer::sum);
+                            cycleSourceTaken += stackCount;
+                            slotIndex++;
+                            tickCounter = 0;
+                            state = State.WAIT_INPUT_TAKE;
+                            return;
+                        }
+                    }
+                }
+            }
+            // Slot didn't match or already satisfied — skip
+            slotIndex++;
+            tickCounter = 0;
+            state = State.WAIT_INPUT_TAKE;
+        } else {
             state = State.CLOSE_INPUT;
             tickCounter = 0;
         }
@@ -463,7 +718,6 @@ public class CraftingExecutor {
         }
 
         if (preciseExtractNeeded <= 0) {
-            // Safety: should not happen
             state = State.TAKE_INPUT;
             tickCounter = 0;
             return;
@@ -472,6 +726,10 @@ public class CraftingExecutor {
         quickMoveSingle(client, menu.containerId, preciseExtractSlot);
         cycleSourceTaken++;
         preciseExtractNeeded--;
+        // Track per-item-type count in auto mode
+        if (autoMode && preciseExtractSlotItem != null) {
+            sourceItemsTaken.merge(preciseExtractSlotItem, 1, Integer::sum);
+        }
         tickCounter = 0;
         state = State.WAIT_INPUT_PRECISE;
     }
@@ -483,6 +741,7 @@ public class CraftingExecutor {
             } else {
                 // Done with this slot, move to next
                 slotIndex++;
+                preciseExtractSlotItem = null;
                 state = State.TAKE_INPUT;
             }
             tickCounter = 0;
@@ -519,7 +778,7 @@ public class CraftingExecutor {
             tickCounter = 0;
             return;
         }
-        if (tickCounter > 20) error("Timed out waiting for crafting table to open");
+        if (tickCounter > CONTAINER_OPEN_TIMEOUT) error("Timed out waiting for crafting table to open");
     }
 
     /**
@@ -531,6 +790,11 @@ public class CraftingExecutor {
         if (!checkPlayer(client)) return;
         if (!(client.player.containerMenu instanceof CraftingMenu)) {
             error("Crafting table not open");
+            return;
+        }
+
+        if (autoMode) {
+            doCheckStepMaterialsAuto(client);
             return;
         }
 
@@ -551,7 +815,38 @@ public class CraftingExecutor {
             state = State.PLACE_RECIPE;
             tickCounter = 0;
         } else {
-            // Out of materials for this step
+            state = State.NEXT_STEP;
+            tickCounter = 0;
+        }
+    }
+
+    private void doCheckStepMaterialsAuto(Minecraft client) {
+        if (currentPlan == null || currentPlan.operations.isEmpty()) {
+            state = State.CLOSE_TABLE;
+            tickCounter = 0;
+            return;
+        }
+
+        if (currentStep >= currentPlan.operations.size()) {
+            state = State.CLOSE_TABLE;
+            tickCounter = 0;
+            return;
+        }
+
+        MaterialPlanner.CraftOp op = currentPlan.operations.get(currentStep);
+        int targetOutputs = op.executions() * op.toCount();
+
+        if (currentStepProduced >= targetOutputs) {
+            state = State.NEXT_STEP;
+            tickCounter = 0;
+            return;
+        }
+
+        // Check if we have enough of the fromItem in player inventory
+        if (hasEnoughForOp(client, op)) {
+            state = State.PLACE_RECIPE;
+            tickCounter = 0;
+        } else {
             state = State.NEXT_STEP;
             tickCounter = 0;
         }
@@ -564,20 +859,37 @@ public class CraftingExecutor {
             return;
         }
 
-        // Belt-and-suspenders: check target before placing
-        if (stepOutputTargets != null
-            && currentStep >= 0 && currentStep < stepOutputTargets.length) {
-            if (currentStepProduced >= stepOutputTargets[currentStep]) {
+        ResourceLocation recipeId;
+        if (autoMode) {
+            // Belt-and-suspenders: check target before placing
+            if (currentStep >= currentPlan.operations.size()) {
                 state = State.NEXT_STEP;
                 tickCounter = 0;
                 return;
             }
+            MaterialPlanner.CraftOp op = currentPlan.operations.get(currentStep);
+            if (currentStepProduced >= op.executions() * op.toCount()) {
+                state = State.NEXT_STEP;
+                tickCounter = 0;
+                return;
+            }
+            recipeId = op.recipeId();
+        } else {
+            // Belt-and-suspenders: check target before placing
+            if (stepOutputTargets != null
+                && currentStep >= 0 && currentStep < stepOutputTargets.length) {
+                if (currentStepProduced >= stepOutputTargets[currentStep]) {
+                    state = State.NEXT_STEP;
+                    tickCounter = 0;
+                    return;
+                }
+            }
+            recipeId = steps.get(currentStep).recipeId();
         }
 
-        RecipeChainAnalyzer.RecipeStep step = steps.get(currentStep);
-        var optHolder = client.level.getRecipeManager().byKey(step.recipeId());
+        var optHolder = client.level.getRecipeManager().byKey(recipeId);
         if (optHolder.isEmpty()) {
-            error("Recipe not found: " + step.recipeId());
+            error("Recipe not found: " + recipeId);
             return;
         }
         client.player.connection.send(
@@ -609,15 +921,23 @@ public class CraftingExecutor {
 
     private void doWaitTake(Minecraft client) {
         if (tickCounter >= WAIT_TICKS) {
-            RecipeChainAnalyzer.RecipeStep step = steps.get(currentStep);
-
-            // Track per-step output count
-            if (stepOutputTargets != null) {
-                currentStepProduced += step.toCount();
-            }
-            // Track cumulative final products
-            if (isLastStep()) {
-                finalProductsMade += step.toCount();
+            int outputCount;
+            if (autoMode) {
+                MaterialPlanner.CraftOp op = currentPlan.operations.get(currentStep);
+                outputCount = op.toCount();
+                currentStepProduced += outputCount;
+                if (isLastStep()) {
+                    finalProductsMade += outputCount;
+                }
+            } else {
+                RecipeChainAnalyzer.RecipeStep step = steps.get(currentStep);
+                outputCount = step.toCount();
+                if (stepOutputTargets != null) {
+                    currentStepProduced += outputCount;
+                }
+                if (isLastStep()) {
+                    finalProductsMade += outputCount;
+                }
             }
 
             state = State.CHECK_STEP_MATERIALS;
@@ -628,7 +948,8 @@ public class CraftingExecutor {
     private void doNextStep(Minecraft client) {
         currentStepProduced = 0;
         currentStep++;
-        if (currentStep >= steps.size()) {
+        int totalSteps = autoMode ? currentPlan.operations.size() : steps.size();
+        if (currentStep >= totalSteps) {
             state = State.CLOSE_TABLE;
         } else {
             state = State.CHECK_STEP_MATERIALS;
@@ -637,6 +958,9 @@ public class CraftingExecutor {
     }
 
     private boolean isLastStep() {
+        if (autoMode && currentPlan != null) {
+            return currentStep == currentPlan.operations.size() - 1;
+        }
         return currentStep == steps.size() - 1;
     }
 
@@ -676,6 +1000,8 @@ public class CraftingExecutor {
         AbstractContainerMenu menu = client.player.containerMenu;
         int containerSize = getContainerSize(menu);
         if (containerSize >= 0) {
+            // Output box opened successfully — reset missing counter
+            outputMissingRetries = 0;
             // Build the list of menu slot indices that hold the final product.
             // Player inventory slots in any storage container start right after
             // the container's own slots, and there are always 36 of them.
@@ -693,7 +1019,17 @@ public class CraftingExecutor {
             tickCounter = 0;
             return;
         }
-        if (tickCounter > 20) error("Timed out waiting for output container to open");
+        if (tickCounter > CONTAINER_OPEN_TIMEOUT) {
+            if (targetCount <= 0) {
+                // Infinite mode: output box may be temporarily gone (being replaced by packer).
+                // Increment the missing counter and wait before retrying.
+                outputMissingRetries++;
+                state = State.WAIT_OUTPUT_RETRY;
+                tickCounter = 0;
+            } else {
+                error("Timed out waiting for output container to open");
+            }
+        }
     }
 
     /**
@@ -737,7 +1073,8 @@ public class CraftingExecutor {
     /**
      * After closing the output box, check if items were deposited.
      * If the player still has final products, the output box is likely full.
-     * Retry up to 3 times within a single output session, then give up.
+     * In infinite mode: wait and retry forever (the box will eventually drain).
+     * In finite mode: retry up to 3 times, then give up.
      * If no more final products, proceed to CHECK_CYCLE.
      */
     private void doRetryOutput(Minecraft client) {
@@ -745,6 +1082,14 @@ public class CraftingExecutor {
 
         if (playerHasFinalProduct(client)) {
             outputBoxAttempts++; // count retries, NOT initial opens
+            if (targetCount <= 0) {
+                // Infinite mode: output box is full, wait and retry forever.
+                // (outputMissingRetries is 0 because the box DID open successfully,
+                // so doWaitOutputRetry will keep retrying.)
+                state = State.WAIT_OUTPUT_RETRY;
+                tickCounter = 0;
+                return;
+            }
             if (outputBoxAttempts >= 3) {
                 client.player.displayClientMessage(
                     Component.translatable("client-tools.ccraft.output_box_full", outputBoxAttempts), false);
@@ -771,6 +1116,46 @@ public class CraftingExecutor {
     // ==================== Cycle Control ====================
 
     /**
+     * Waits a short delay before retrying the input box. In infinite mode:
+     * - If the box opened but was empty → retry forever (input box is still there,
+     *   just waiting for hoppers to feed more items).
+     * - If the box failed to open (timeout, probably broken/replaced) → retry up
+     *   to MAX_MISSING_RETRIES, then stop.
+     */
+    private void doWaitInputRetry(Minecraft client) {
+        if (tickCounter >= RETRY_DELAY_TICKS) {
+            if (targetCount <= 0 && inputMissingRetries >= MAX_MISSING_RETRIES) {
+                // Input box has been missing for too long — no more raw materials
+                sendDoneMessage(client);
+                state = State.DONE;
+            } else {
+                state = State.OPEN_INPUT;
+                tickCounter = 0;
+            }
+        }
+    }
+
+    /**
+     * Waits a short delay before retrying the output box. In infinite mode:
+     * - If the box opened but was full → retry forever (output box is still there,
+     *   just waiting for hoppers to drain items).
+     * - If the box failed to open (timeout, probably broken/replaced) → retry up
+     *   to MAX_MISSING_RETRIES, then stop.
+     */
+    private void doWaitOutputRetry(Minecraft client) {
+        if (tickCounter >= RETRY_DELAY_TICKS) {
+            if (targetCount <= 0 && outputMissingRetries >= MAX_MISSING_RETRIES) {
+                // Output box has been missing for too long — no more empty boxes
+                sendDoneMessage(client);
+                state = State.DONE;
+            } else {
+                state = State.OPEN_OUTPUT;
+                tickCounter = 0;
+            }
+        }
+    }
+
+    /**
      * After a complete input→craft→output cycle, decides whether to:
      * - Loop back to input (target not yet reached, source was available)
      * - Stop (target reached, or input exhausted, or safety limit hit)
@@ -780,24 +1165,21 @@ public class CraftingExecutor {
 
         cycleCount++;
 
-        // Safety limit
-        if (cycleCount >= MAX_CYCLES) {
-            client.player.displayClientMessage(
-                Component.translatable("client-tools.ccraft.cycle_limit", MAX_CYCLES), false);
-            sendDoneMessage(client);
-            state = State.DONE;
-            return;
-        }
-
         if (targetCount <= 0) {
-            // Infinite mode: loop while source items were found
+            // Infinite mode: loop while source items were found.
+            // If the input box opened but was empty → wait and retry forever
+            // (the box is still there, just waiting for hoppers to feed it).
             if (cycleSourceTaken > 0) {
-                outputBoxAttempts = 0; // reset retry counter for new cycle
+                inputMissingRetries = 0; // reset: box opened successfully this cycle
+                outputBoxAttempts = 0;
                 state = State.OPEN_INPUT;
                 tickCounter = 0;
             } else {
-                sendDoneMessage(client);
-                state = State.DONE;
+                // Box opened but was empty — inputMissingRetries is 0 (was reset
+                // when the box opened), so doWaitInputRetry will retry forever.
+                outputBoxAttempts = 0;
+                state = State.WAIT_INPUT_RETRY;
+                tickCounter = 0;
             }
         } else {
             // Finite mode: check if target reached
@@ -819,10 +1201,13 @@ public class CraftingExecutor {
             }
 
             // Target not reached
-            if (cycleSourceTaken > 0 || sourceItemsToTake == 0) {
+            if (cycleSourceTaken > 0 || sourceItemsToTake == 0 ||
+                (autoMode && currentPlan != null && !currentPlan.isEmpty())) {
                 // We either took source items this cycle, or we skipped taking
                 // because we already had enough in inventory. Recalc and loop.
-                recalcStepTargets();
+                if (!autoMode) {
+                    recalcStepTargets();
+                }
                 outputBoxAttempts = 0; // reset retry counter for new cycle
                 state = State.OPEN_INPUT;
                 tickCounter = 0;
@@ -914,6 +1299,19 @@ public class CraftingExecutor {
     private boolean hasEnoughForStep(Minecraft client, RecipeChainAnalyzer.RecipeStep step) {
         int needed = step.fromCount();
         Item neededItem = step.fromItem();
+        int found = 0;
+        for (ItemStack stack : client.player.getInventory().items) {
+            if (stack.getItem() == neededItem) {
+                found += stack.getCount();
+                if (found >= needed) return true;
+            }
+        }
+        return false;
+    }
+
+    private boolean hasEnoughForOp(Minecraft client, MaterialPlanner.CraftOp op) {
+        int needed = op.fromCount();
+        Item neededItem = op.fromItem();
         int found = 0;
         for (ItemStack stack : client.player.getInventory().items) {
             if (stack.getItem() == neededItem) {

@@ -6,6 +6,7 @@ import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.craft.MaterialPlanner;
 import indi.ohtoai.tool.client_tools.client.craft.RecipeChainAnalyzer;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
@@ -185,77 +186,77 @@ public class CcraftCommand {
 
     private static int setSource(FabricClientCommandSource source, String itemInput) {
         Item item = parseItem(itemInput);
-        if (item == null) { source.sendFeedback(Component.literal("§cUnknown item: " + itemInput)); return 0; }
+        if (item == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.unknown_item", itemInput)); return 0; }
         CcraftState.setSourceItem(item);
-        source.sendFeedback(Component.literal("§aSource set to: §e" + BuiltInRegistries.ITEM.getKey(item)));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.source_set", BuiltInRegistries.ITEM.getKey(item).toString()));
         return 1;
     }
 
     private static int setProduct(FabricClientCommandSource source, String itemInput) {
         Item item = parseItem(itemInput);
-        if (item == null) { source.sendFeedback(Component.literal("§cUnknown item: " + itemInput)); return 0; }
+        if (item == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.unknown_item", itemInput)); return 0; }
         CcraftState.setProductItem(item);
-        source.sendFeedback(Component.literal("§aProduct set to: §e" + BuiltInRegistries.ITEM.getKey(item)));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.product_set", BuiltInRegistries.ITEM.getKey(item).toString()));
         return 1;
     }
 
     private static int setStationAimed(FabricClientCommandSource source) {
         BlockPos pos = getAimedBlockPos();
-        if (pos == null) { source.sendFeedback(Component.literal("§cNot looking at a block.")); return 0; }
+        if (pos == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.not_looking_at_block")); return 0; }
         CcraftState.setStationPos(pos);
-        source.sendFeedback(Component.literal("§aStation set to: §e" + pos.getX() + " " + pos.getY() + " " + pos.getZ()));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.station_set", pos.getX(), pos.getY(), pos.getZ()));
         return 1;
     }
 
     private static int setStationManual(FabricClientCommandSource source, int x, int y, int z) {
         CcraftState.setStationPos(new BlockPos(x, y, z));
-        source.sendFeedback(Component.literal("§aStation set to: §e" + x + " " + y + " " + z));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.station_set", x, y, z));
         return 1;
     }
 
     private static int setInputAimed(FabricClientCommandSource source) {
         BlockPos pos = getAimedBlockPos();
-        if (pos == null) { source.sendFeedback(Component.literal("§cNot looking at a block.")); return 0; }
+        if (pos == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.not_looking_at_block")); return 0; }
         CcraftState.setInputPos(pos);
-        source.sendFeedback(Component.literal("§aInput box set to: §e" + pos.getX() + " " + pos.getY() + " " + pos.getZ()));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.input_box_set", pos.getX(), pos.getY(), pos.getZ()));
         return 1;
     }
 
     private static int setInputManual(FabricClientCommandSource source, int x, int y, int z) {
         CcraftState.setInputPos(new BlockPos(x, y, z));
-        source.sendFeedback(Component.literal("§aInput box set to: §e" + x + " " + y + " " + z));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.input_box_set", x, y, z));
         return 1;
     }
 
     private static int setOutputAimed(FabricClientCommandSource source) {
         BlockPos pos = getAimedBlockPos();
-        if (pos == null) { source.sendFeedback(Component.literal("§cNot looking at a block.")); return 0; }
+        if (pos == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.not_looking_at_block")); return 0; }
         CcraftState.setOutputPos(pos);
-        source.sendFeedback(Component.literal("§aOutput box set to: §e" + pos.getX() + " " + pos.getY() + " " + pos.getZ()));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.output_box_set", pos.getX(), pos.getY(), pos.getZ()));
         return 1;
     }
 
     private static int setOutputManual(FabricClientCommandSource source, int x, int y, int z) {
         CcraftState.setOutputPos(new BlockPos(x, y, z));
-        source.sendFeedback(Component.literal("§aOutput box set to: §e" + x + " " + y + " " + z));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.output_box_set", x, y, z));
         return 1;
     }
 
     private static int setCount(FabricClientCommandSource source, String value) {
         if (value.equalsIgnoreCase("infinite")) {
             CcraftState.setRepeatCount(-1);
-            source.sendFeedback(Component.literal("§aTarget count set to: §einfinite §7(until materials run out or box full)"));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.count_set_infinite"));
         } else {
             try {
                 int count = Integer.parseInt(value);
                 if (count < 1) {
-                    source.sendFeedback(Component.literal("§cCount must be >= 1, or use §einfinite"));
+                    source.sendFeedback(Component.translatable("client-tools.ccraft.count_must_be_positive"));
                     return 0;
                 }
                 CcraftState.setRepeatCount(count);
-                source.sendFeedback(Component.literal("§aTarget count set to: §e" + count + " §7(max final products to craft)"));
+                source.sendFeedback(Component.translatable("client-tools.ccraft.count_set_finite", count));
             } catch (NumberFormatException e) {
-                source.sendFeedback(Component.literal("§cInvalid count. Use a number or §einfinite"));
+                source.sendFeedback(Component.translatable("client-tools.ccraft.count_invalid"));
                 return 0;
             }
         }
@@ -265,41 +266,77 @@ public class CcraftCommand {
     // ==================== Status / Clear ====================
 
     private static int showStatus(FabricClientCommandSource source) {
-        source.sendFeedback(Component.literal("§6--- /ccraft Status ---"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.status_header"));
+
+        // --- Runtime status ---
+        CraftingExecutor executor = CraftingExecutor.getInstance();
+        if (executor.isRunning()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_running"));
+            int target = executor.getTargetCount();
+            if (target > 0) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.status_progress_finite",
+                    executor.getFinalProductsMade(), target,
+                    executor.getCycleCount()));
+            } else {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.status_progress_infinite",
+                    executor.getFinalProductsMade(), executor.getCycleCount()));
+            }
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_current_step",
+                executor.getCurrentStepIndex() + 1, executor.getStepCount(), executor.getCurrentStepProgress()));
+        } else if (executor.isDone()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_done"));
+            if (executor.getTotalCrafted() > 0) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.status_done_deposited",
+                    executor.getTotalCrafted(), executor.getCycleCount()));
+            } else if (executor.getFinalProductsMade() > 0) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.status_done_made",
+                    executor.getFinalProductsMade(), executor.getCycleCount()));
+            }
+        } else if (executor.isError()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_error",
+                executor.getErrorMessage()));
+        }
+
+        // --- Settings ---
+        source.sendFeedback(Component.translatable("client-tools.ccraft.status_settings"));
         printParam(source, "Source", CcraftState.getSourceItem());
         printParam(source, "Product", CcraftState.getProductItem());
         printPos(source, "Station", CcraftState.getStationPos());
         printPos(source, "Input box", CcraftState.getInputPos());
         printPos(source, "Output box", CcraftState.getOutputPos());
         int count = CcraftState.getRepeatCount();
-        source.sendFeedback(Component.literal(
-            count == -1 ? "§aTarget count: §einfinite"
-                        : "§aTarget count: §e" + count));
-        if (CcraftState.isReady()) {
-            source.sendFeedback(Component.literal("§a§lReady! Use §e/ccraft run"));
+        if (count == -1) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_target_infinite"));
         } else {
-            source.sendFeedback(Component.literal("§eMissing: " + CcraftState.getMissingParams()));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_target_finite", count));
+        }
+        if (CcraftState.isReady()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_ready"));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_missing", CcraftState.getMissingParams()));
         }
         return 1;
     }
 
     private static void printParam(FabricClientCommandSource source, String label, Item item) {
-        source.sendFeedback(Component.literal(
-            item != null ? "§a" + label + ": §e" + BuiltInRegistries.ITEM.getKey(item)
-                         : "§7" + label + ": §7(not set)"
-        ));
+        if (item != null) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.param_set", label, BuiltInRegistries.ITEM.getKey(item).toString()));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.param_not_set", label));
+        }
     }
 
     private static void printPos(FabricClientCommandSource source, String label, BlockPos pos) {
-        source.sendFeedback(Component.literal(
-            pos != null ? "§a" + label + ": §e" + pos.getX() + " " + pos.getY() + " " + pos.getZ()
-                        : "§7" + label + ": §7(not set)"
-        ));
+        if (pos != null) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.param_set", label, pos.getX() + " " + pos.getY() + " " + pos.getZ()));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.param_not_set", label));
+        }
     }
 
     private static int clearState(FabricClientCommandSource source) {
         CcraftState.clear();
-        source.sendFeedback(Component.literal("§a/ccraft state cleared."));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.state_cleared"));
         return 1;
     }
 
@@ -307,61 +344,83 @@ public class CcraftCommand {
 
     private static int runCraft(FabricClientCommandSource source) {
         if (!CcraftState.isReady()) {
-            source.sendFeedback(Component.literal("§cMissing parameters: " + CcraftState.getMissingParams()));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.missing_params", CcraftState.getMissingParams()));
             return 0;
         }
 
         Minecraft client = Minecraft.getInstance();
-        if (client.level == null) { source.sendFeedback(Component.literal("§cNot connected to a world.")); return 0; }
+        if (client.level == null) { source.sendFeedback(Component.translatable("client-tools.ccraft.not_in_world")); return 0; }
 
         // Auto-find crafting table if not set
         BlockPos station = CcraftState.getStationPos();
         if (station == null) {
             station = CraftingExecutor.findNearestCraftingTable(client, CcraftState.getInputPos(), 16);
             if (station == null) {
-                source.sendFeedback(Component.literal("§cNo crafting table found nearby. Use §e/ccraft station <x> <y> <z>"));
+                source.sendFeedback(Component.translatable("client-tools.ccraft.no_table_found"));
                 return 0;
             }
-            source.sendFeedback(Component.literal("§7Auto-detected crafting table at: §e"
-                + station.getX() + " " + station.getY() + " " + station.getZ()));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.auto_detected_table",
+                station.getX(), station.getY(), station.getZ()));
         }
 
-        Item sourceItem = CcraftState.getSourceItem();
         Item productItem = CcraftState.getProductItem();
         BlockPos input = CcraftState.getInputPos();
         BlockPos output = CcraftState.getOutputPos();
         RecipeManager rm = client.level.getRecipeManager();
         HolderLookup.Provider reg = client.level.registryAccess();
-
-        RecipeChainAnalyzer.RecipeChain chain = RecipeChainAnalyzer.analyze(sourceItem, productItem, rm, reg);
-        if (chain == null) {
-            source.sendFeedback(Component.literal("§cNo crafting chain found from §e"
-                + BuiltInRegistries.ITEM.getKey(sourceItem) + " §cto §e"
-                + BuiltInRegistries.ITEM.getKey(productItem)));
-            return 0;
-        }
-        if (chain.steps().isEmpty()) {
-            source.sendFeedback(Component.literal("§eSource and product are the same item."));
-            return 0;
-        }
-
-        source.sendFeedback(Component.literal("§6=== Crafting Chain ==="));
-        for (int i = 0; i < chain.steps().size(); i++) {
-            source.sendFeedback(Component.literal("§b  Step " + (i + 1) + ": §f" + chain.steps().get(i).toString()));
-        }
-        source.sendFeedback(Component.literal("§6======================"));
-        source.sendFeedback(Component.literal("§7Station: §f" + station.getX() + " " + station.getY() + " " + station.getZ()
-            + "  §7Input: §f" + input.getX() + " " + input.getY() + " " + input.getZ()
-            + "  §7Output: §f" + output.getX() + " " + output.getY() + " " + output.getZ()));
-
-        if (client.player != null && client.player.blockPosition().distSqr(station) > 36) {
-            source.sendFeedback(Component.literal("§eMove closer to the crafting table."));
-        }
-
         int repeatCount = CcraftState.getRepeatCount();
         String countLabel = repeatCount == -1 ? "infinite" : String.valueOf(repeatCount);
-        CraftingExecutor.getInstance().start(chain.steps(), station, input, output, productItem, repeatCount);
-        source.sendFeedback(Component.literal("§a§lExecuting crafting chain... (max " + countLabel + " final products)"));
+
+        if (CcraftState.hasSourceItem()) {
+            // --- Legacy mode: fixed source → product chain ---
+            Item sourceItem = CcraftState.getSourceItem();
+            RecipeChainAnalyzer.RecipeChain chain = RecipeChainAnalyzer.analyze(sourceItem, productItem, rm, reg);
+            if (chain == null) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.no_chain_found",
+                    BuiltInRegistries.ITEM.getKey(sourceItem).toString(),
+                    BuiltInRegistries.ITEM.getKey(productItem).toString()));
+                return 0;
+            }
+            if (chain.steps().isEmpty()) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.source_equals_product"));
+                return 0;
+            }
+
+            source.sendFeedback(Component.translatable("client-tools.ccraft.chain_header"));
+            for (int i = 0; i < chain.steps().size(); i++) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.chain_step", i + 1, chain.steps().get(i).toString()));
+            }
+            source.sendFeedback(Component.translatable("client-tools.ccraft.chain_footer"));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.location_info",
+                station.getX(), station.getY(), station.getZ(),
+                input.getX(), input.getY(), input.getZ(),
+                output.getX(), output.getY(), output.getZ()));
+
+            if (client.player != null && client.player.blockPosition().distSqr(station) > 36) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.move_closer"));
+            }
+
+            CraftingExecutor.getInstance().start(chain.steps(), station, input, output, productItem, repeatCount);
+            source.sendFeedback(Component.translatable("client-tools.ccraft.executing", countLabel));
+        } else {
+            // --- Auto-detect mode: scan input chest, build multi-source plan ---
+            MaterialPlanner planner = new MaterialPlanner(rm, reg);
+
+            source.sendFeedback(Component.translatable("client-tools.ccraft.auto_mode",
+                BuiltInRegistries.ITEM.getKey(productItem).toString()));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.auto_scanning"));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.location_info",
+                station.getX(), station.getY(), station.getZ(),
+                input.getX(), input.getY(), input.getZ(),
+                output.getX(), output.getY(), output.getZ()));
+
+            if (client.player != null && client.player.blockPosition().distSqr(station) > 36) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.move_closer"));
+            }
+
+            CraftingExecutor.getInstance().startAuto(productItem, repeatCount, station, input, output, planner);
+            source.sendFeedback(Component.translatable("client-tools.ccraft.executing", countLabel));
+        }
         return 1;
     }
 
@@ -370,9 +429,9 @@ public class CcraftCommand {
     private static int stopCraft(FabricClientCommandSource source) {
         if (CraftingExecutor.getInstance().isRunning()) {
             CraftingExecutor.getInstance().stop();
-            source.sendFeedback(Component.literal("§cCrafting stopped."));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.stopped"));
         } else {
-            source.sendFeedback(Component.literal("§7No crafting is currently running."));
+            source.sendFeedback(Component.translatable("client-tools.ccraft.not_running"));
         }
         return 1;
     }

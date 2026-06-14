@@ -79,9 +79,10 @@ public class RecipeChainAnalyzer {
     }
 
     /**
-     * Internal edge representation for BFS.
+     * Edge representation for recipe graph traversal. Package-private so
+     * {@link MaterialPlanner} can reuse the same edge type.
      */
-    private record RecipeEdge(Item fromItem, Item toItem, int fromCount, int toCount, ResourceLocation recipeId) {
+    record RecipeEdge(Item fromItem, Item toItem, int fromCount, int toCount, ResourceLocation recipeId) {
     }
 
     /**
@@ -242,5 +243,50 @@ public class RecipeChainAnalyzer {
             if (!ing.isEmpty()) count++;
         }
         return count;
+    }
+
+    /**
+     * Build a reverse recipe map: for each item, list all single-material
+     * recipes that produce it. The map is built once and reused across
+     * multiple planning cycles.
+     *
+     * @param recipeManager  the client's recipe manager
+     * @param registryAccess registry access for result item lookups
+     * @return map from output item → list of recipes that produce it
+     */
+    public static Map<Item, List<RecipeEdge>> buildReverseRecipeMap(
+        RecipeManager recipeManager,
+        HolderLookup.Provider registryAccess
+    ) {
+        Map<Item, List<RecipeEdge>> reverseMap = new HashMap<>();
+        List<RecipeHolder<CraftingRecipe>> allRecipes = recipeManager.getAllRecipesFor(RecipeType.CRAFTING);
+
+        for (RecipeHolder<CraftingRecipe> holder : allRecipes) {
+            CraftingRecipe recipe = holder.value();
+
+            Item inputItem = getSingleIngredientItem(recipe);
+            if (inputItem == null) continue;
+
+            int inputCount = countNonEmptyIngredients(recipe);
+
+            ItemStack resultStack;
+            try {
+                resultStack = recipe.getResultItem(registryAccess);
+            } catch (Exception e) {
+                continue;
+            }
+
+            if (resultStack.isEmpty()) continue;
+
+            Item outputItem = resultStack.getItem();
+            int outputCount = resultStack.getCount();
+
+            if (inputItem == outputItem) continue;
+
+            RecipeEdge edge = new RecipeEdge(inputItem, outputItem, inputCount, outputCount, holder.id());
+            reverseMap.computeIfAbsent(outputItem, k -> new ArrayList<>()).add(edge);
+        }
+
+        return reverseMap;
     }
 }

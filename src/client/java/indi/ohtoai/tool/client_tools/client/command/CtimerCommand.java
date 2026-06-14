@@ -109,11 +109,11 @@ public class CtimerCommand {
             try {
                 times = Integer.parseInt(countStr);
                 if (times <= 0) {
-                    source.sendFeedback(Component.literal("§cCount must be a positive integer or \"infinite\"."));
+                    source.sendFeedback(Component.translatable("client-tools.ctimer.count_invalid"));
                     return 0;
                 }
             } catch (NumberFormatException e) {
-                source.sendFeedback(Component.literal("§cInvalid count: " + countStr + ". Use a positive integer or \"infinite\"."));
+                source.sendFeedback(Component.translatable("client-tools.ctimer.count_parse_error", countStr));
                 return 0;
             }
         }
@@ -121,7 +121,7 @@ public class CtimerCommand {
         // Parse duration
         int intervalTicks = parseDuration(durationStr);
         if (intervalTicks <= 0) {
-            source.sendFeedback(Component.literal("§cInvalid duration: " + durationStr + ". Examples: 1s, 5m, 1h, 500ms, 20t."));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.duration_invalid", durationStr));
             return 0;
         }
 
@@ -129,9 +129,9 @@ public class CtimerCommand {
         TimerInstance timer = TimerManager.addTimer(times, intervalTicks, command);
 
         String timesDesc = times == -1 ? "infinite" : String.valueOf(times);
-        source.sendFeedback(Component.literal(
-            "§aTimer #" + timer.getId() + " started: \"" + command + "\" every " +
-            formatDuration(intervalTicks) + " (" + timesDesc + " times)"
+        source.sendFeedback(Component.translatable(
+            "client-tools.ctimer.started",
+            timer.getId(), command, formatDuration(intervalTicks), timesDesc
         ));
         return 1;
     }
@@ -139,9 +139,9 @@ public class CtimerCommand {
     private static int stopAll(FabricClientCommandSource source) {
         int removed = TimerManager.stopAll();
         if (removed == 0) {
-            source.sendFeedback(Component.literal("§eNo active timers to stop."));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.no_timers_to_stop"));
         } else {
-            source.sendFeedback(Component.literal("§aStopped " + removed + " timer(s)."));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.stopped_all", removed));
         }
         return removed;
     }
@@ -149,9 +149,9 @@ public class CtimerCommand {
     private static int stopPattern(FabricClientCommandSource source, String pattern) {
         int removed = TimerManager.stop(pattern);
         if (removed == 0) {
-            source.sendFeedback(Component.literal("§eNo matching timers found for: " + pattern));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.no_matching_timers", pattern));
         } else {
-            source.sendFeedback(Component.literal("§aStopped " + removed + " timer(s) matching \"" + pattern + "\"."));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.stopped_matching", removed, pattern));
         }
         return removed;
     }
@@ -160,18 +160,19 @@ public class CtimerCommand {
         List<TimerInstance> activeTimers = TimerManager.getTimers();
 
         if (activeTimers.isEmpty()) {
-            source.sendFeedback(Component.literal("§eNo active timers."));
+            source.sendFeedback(Component.translatable("client-tools.ctimer.no_active_timers"));
             return 0;
         }
 
-        source.sendFeedback(Component.literal("§6--- Active Timers (" + activeTimers.size() + ") ---"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.list_header", activeTimers.size()));
         for (TimerInstance timer : activeTimers) {
             String timesDesc = timer.isInfinite()
                 ? "infinite"
                 : timer.getRemainingTimes() + "/" + timer.getTotalTimes() + " remaining";
-            String line = "§b" + timer.getId() + ". §f" + timer.getCommand() +
-                " §7(every " + formatDuration(timer.getIntervalTicks()) + ", " + timesDesc + ")";
-            source.sendFeedback(Component.literal(line));
+            source.sendFeedback(Component.translatable(
+                "client-tools.ctimer.list_entry",
+                timer.getId(), timer.getCommand(), formatDuration(timer.getIntervalTicks()), timesDesc
+            ));
         }
         return activeTimers.size();
     }

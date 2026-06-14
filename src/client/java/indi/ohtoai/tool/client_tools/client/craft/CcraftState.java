@@ -133,13 +133,21 @@ public class CcraftState {
 
     public static boolean isReady() {
         ensureLoaded();
-        return sourceItem != null && productItem != null && inputPos != null && outputPos != null;
+        return productItem != null && inputPos != null && outputPos != null;
+    }
+
+    /**
+     * Returns true if the user explicitly set a source item (legacy mode).
+     * When false, the system uses auto-detect multi-source mode.
+     */
+    public static boolean hasSourceItem() {
+        ensureLoaded();
+        return sourceItem != null;
     }
 
     public static String getMissingParams() {
         ensureLoaded();
         StringBuilder sb = new StringBuilder();
-        if (sourceItem == null) sb.append("source, ");
         if (productItem == null) sb.append("product, ");
         if (inputPos == null) sb.append("input, ");
         if (outputPos == null) sb.append("output, ");
