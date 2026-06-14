@@ -25,7 +25,7 @@ All features run entirely on the client side. No server-side installation is req
 
 `Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供三个实用的自动化工具：
 
-- **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
+- **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成，单项设置清除，自定义高亮时长与颜色
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
 - **`/cchat`** — 快捷聊天消息发送
 
@@ -41,6 +41,9 @@ All features run entirely on the client side. No server-side installation is req
 - Smart multi-source material scanning — detects available materials in the input chest and builds an optimal crafting plan
 - Full crafting chain analysis — automatically handles intermediate crafting steps (e.g., planks → sticks → tools)
 - Configurable target count with infinite mode (crafts until materials run out or output is full)
+- **Per-setting clear** — individually clear source, product, station, input, output, or count without resetting everything
+- **Enhanced block highlight (`/ccraft show`)** — customizable duration and per-position colors with tab-completion for named colors (red, green, blue...) and hex values
+- Real-time status with contextual hints — shows stop command when running, run command when ready
 - Container timeout and retry handling
 - Real-time progress tracking during execution
 
@@ -70,15 +73,43 @@ All features run entirely on the client side. No server-side installation is req
 ### `/ccraft` Quick Start
 
 ```
+--- Basic setup ---
 /ccraft product minecraft:diamond_pickaxe   — Set the item you want to craft
-/ccraft station ~ ~ ~                        — Set crafting table position (or look at it)
-/ccraft input ~1 ~ ~                         — Set input container position
-/ccraft output ~-1 ~ ~                       — Set output container position
-/ccraft count infinite                       — Set target count (or use a number)
+/ccraft input                                — Set input chest (look at it)
+/ccraft output                               — Set output chest (look at it)
+/ccraft station                              — Set crafting table (look at it, or auto-detected)
+
+--- Target count ---
+/ccraft count 64                             — Craft 64 products
+/ccraft count infinite                       — Craft until materials run out or output is full
+
+--- Control ---
 /ccraft run                                  — Start crafting!
-/ccraft status                               — Check current configuration
-/ccraft stop                                 — Stop crafting
+/ccraft stop                                 — Stop the running craft
+/ccraft status                               — Check runtime progress and configuration
+
+--- Block highlight ---
+/ccraft show                                 — Highlight positions for 3s (default colors)
+/ccraft show 10s                             — Highlight for 10 seconds
+/ccraft show 5s red blue gold                — 5s, custom colors (station/input/output)
+/ccraft show 30s FF5555 55FF55 FFAA00        — 30s, hex colors
+/ccraft show 1m green cyan magenta           — 1 minute with named colors
+
+--- Clear settings ---
+/ccraft source clear                         — Clear only the source item
+/ccraft product clear                        — Clear only the product item
+/ccraft station clear                        — Clear only station position
+/ccraft input clear                          — Clear only input box position
+/ccraft output clear                         — Clear only output box position
+/ccraft count clear                          — Reset count to default (1)
+/ccraft clear                                — Clear all settings at once
 ```
+
+**Duration formats:** `3s` (seconds), `10t` (ticks), `1m` (minutes), `500ms` (milliseconds)
+
+**Color formats:** named (`red`, `green`, `blue`, `gold`, `yellow`, `cyan`, `magenta`, `white`, `orange`, `purple`, `pink`, `lime`, `aqua`, `navy`, `teal`, `brown`, `gray`, `black`) or hex (`FF5555`, `#FF5555`, `0xFF5555`)
+
+Use **Tab** to auto-complete durations and colors in the `show` command.
 
 ### `/ctimer` Quick Start
 
