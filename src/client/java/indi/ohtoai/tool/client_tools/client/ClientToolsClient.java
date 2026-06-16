@@ -8,11 +8,13 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import indi.ohtoai.tool.client_tools.client.command.CchatCommand;
 import indi.ohtoai.tool.client_tools.client.command.CcraftCommand;
 import indi.ohtoai.tool.client_tools.client.command.CflyCommand;
+import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.sequence.SequenceExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.timer.TimerManager;
@@ -27,6 +29,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CcraftCommand.register(dispatcher);
 			CflyCommand.register(dispatcher);
 			CsweepCommand.register(dispatcher);
+			CsequenceCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor
@@ -34,6 +37,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			TimerManager.tick(client);
 			CraftingExecutor.getInstance().tick(client);
 			SweepExecutor.getInstance().tick(client);
+			SequenceExecutor.getInstance().tick(client);
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
 		});

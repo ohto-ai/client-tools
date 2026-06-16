@@ -13,13 +13,14 @@ Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/relea
 
 ## Introduction
 
-`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides five practical automation tools:
+`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides six practical automation tools:
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
 - **`/cchat`** — Quick chat message sender
 - **`/cfly`** — Flight toggle with jump and status display
 - **`/csweep`** — Snake-pattern area traversal for automated clearing (works with projection printers and auto-mining mods)
+- **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -27,13 +28,14 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供五个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供六个实用工具：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
 - **`/cchat`** — 快捷聊天消息发送
 - **`/cfly`** — 飞行开关，支持起跳和状态查看
 - **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机和自动挖掘 mod 实现区域清空
+- **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -84,6 +86,15 @@ All features run entirely on the client side. No server-side installation is req
 
 - Send chat messages directly from the command line
 - Useful for automation scripts and quick communication
+
+### `/csequence` — mcfunction Sequence Executor
+
+- Edit `.mcfunction` files with your system's default text editor from within Minecraft
+- Execute commands sequentially with configurable delay between each line
+- Supports **nested sequences** — a sequence can call another, which can call another (up to 10 levels deep)
+- **Cycle detection** — prevents infinite recursion (A→B→A is blocked automatically)
+- Loop mode for repeating sequences
+- All sequence files are stored in `config/client-tools/sequences/`
 
 ---
 
@@ -194,6 +205,33 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 /cchat Hello everyone!         — Send "Hello everyone!" in chat
 ```
+
+### `/csequence` Quick Start
+
+```
+--- Editing ---
+/csequence new daily           — Create an empty daily.mcfunction and open in external editor
+/csequence edit daily          — Open daily.mcfunction in external editor
+/csequence folder              — Open the sequences folder in file explorer
+/csequence list                — List all saved sequences
+/csequence delete daily        — Delete daily.mcfunction
+
+--- Execution ---
+/csequence run daily           — Run daily.mcfunction (1-tick delay, no loop)
+/csequence run daily 1s        — Run with 1-second delay between commands
+/csequence run daily 500ms loop— Run with 500ms delay, repeat forever
+/csequence run farm 5t loop    — Run with 5-tick delay, loop
+
+--- Control ---
+/csequence stop                — Stop the running sequence
+/csequence status              — Show current progress, nesting depth, and call stack
+```
+
+**mcfunction format:** Standard Minecraft function syntax — one command per line, `#` for comments, blank lines ignored.
+
+**Nested sequences:** Use `/csequence run <name>` inside a sequence file to call another sequence. The parent pauses, the child runs to completion, then the parent resumes. Cycle detection prevents infinite recursion.
+
+**External editor:** Uses your system's default text editor (Notepad, VSCode, etc.). On Windows, also falls back to `cmd /c start` if the Java Desktop API is unavailable.
 
 ---
 
