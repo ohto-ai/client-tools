@@ -7,6 +7,7 @@ import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import indi.ohtoai.tool.client_tools.client.command.CchatCommand;
 import indi.ohtoai.tool.client_tools.client.command.CcraftCommand;
+import indi.ohtoai.tool.client_tools.client.command.CflyCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
@@ -21,6 +22,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CtimerCommand.register(dispatcher);
 			CchatCommand.register(dispatcher);
 			CcraftCommand.register(dispatcher);
+			CflyCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor

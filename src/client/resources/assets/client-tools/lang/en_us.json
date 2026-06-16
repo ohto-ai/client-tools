@@ -1,4 +1,14 @@
 {
+  "client-tools.cfly.not_in_world": "§cCannot toggle flight: not connected to a world.",
+  "client-tools.cfly.not_allowed": "§cFlight is not allowed here. You need to be in creative mode or a flight-enabled region.",
+  "client-tools.cfly.enabled": "§aFlight enabled.",
+  "client-tools.cfly.enabled_jump": "§aFlight enabled + jump.",
+  "client-tools.cfly.disabled": "§eFlight disabled.",
+  "client-tools.cfly.status_header": "§6--- Flight Status ---",
+  "client-tools.cfly.status_mayfly": "§7  mayfly (allowed): %s",
+  "client-tools.cfly.status_flying": "§7  flying (active): %s",
+  "client-tools.cfly.status_gamemode": "§7  gamemode: §e%s",
+
   "client-tools.cchat.sent": "§aSent: %s",
   "client-tools.cchat.not_connected": "§cCannot send chat: not connected to a server.",
 

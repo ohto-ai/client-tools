@@ -1,4 +1,14 @@
 {
+  "client-tools.cfly.not_in_world": "§c无法切换飞行: 未连接到世界。",
+  "client-tools.cfly.not_allowed": "§c此处不允许飞行。需要处于创造模式或飞行开启的领地内。",
+  "client-tools.cfly.enabled": "§a飞行已开启。",
+  "client-tools.cfly.enabled_jump": "§a飞行已开启并起跳。",
+  "client-tools.cfly.disabled": "§e飞行已关闭。",
+  "client-tools.cfly.status_header": "§6--- 飞行状态 ---",
+  "client-tools.cfly.status_mayfly": "§7  飞行权限 (mayfly): %s",
+  "client-tools.cfly.status_flying": "§7  飞行中 (flying): %s",
+  "client-tools.cfly.status_gamemode": "§7  游戏模式: §e%s",
+
   "client-tools.cchat.sent": "§a已发送: %s",
   "client-tools.cchat.not_connected": "§c无法发送聊天: 未连接到服务器。",
 
