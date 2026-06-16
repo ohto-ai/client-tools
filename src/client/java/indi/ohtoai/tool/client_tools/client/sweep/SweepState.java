@@ -121,7 +121,7 @@ public class SweepState {
 
     // --- Pause state (persisted) ---
 
-    public static void savePauseState(int stationIndex) {
+    public static void savePauseStationIndex(int stationIndex) {
         ensureLoaded();
         savedStationIndex = stationIndex;
         paused = true;

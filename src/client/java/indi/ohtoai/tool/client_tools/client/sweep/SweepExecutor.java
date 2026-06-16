@@ -10,24 +10,41 @@ import java.util.List;
 
 /**
  * Tick-driven state machine that flies the player through a cuboid area
- * in a snake pattern. Movement only — block breaking is handled by other mods.
+ * in a snake pattern at constant speed. Movement only — block breaking
+ * is handled by other mods.
+ *
+ * <p>Movement is <b>continuous and smooth</b>: the player advances along
+ * the path at a constant rate each tick, with linear interpolation between
+ * stations. No stop-and-go at each waypoint.
  *
  * <p>Lifecycle:
  * <ol>
- *   <li>{@link #start()} — build snake-path station waypoints</li>
- *   <li>{@link #tick(Minecraft)} — MOVE_TO_STATION → ADVANCE → DONE</li>
+ *   <li>{@link #start()} — build snake-path, pre-compute segment distances</li>
+ *   <li>{@link #tick(Minecraft)} — MOVING (advance along path each tick) → DONE</li>
  *   <li>{@link #stop()} — halt immediately</li>
  * </ol>
- *
- * <p>Movement is <b>coordinate-based</b>: each tick sends a position packet
- * toward the target; the executor only advances when the player is within
- * 0.5 blocks. Liquid slowdown is handled naturally — no timer involved.
  */
 public class SweepExecutor {
 
     private enum State {
-        IDLE, BUILD_PATH, MOVE_TO_STATION, ADVANCE, PAUSED, ERROR, DONE
+        IDLE, BUILD_PATH, MOVING, PAUSED, ERROR, DONE
     }
+
+    // --- Inner data class for path segments ---
+
+    private static class PathSegment {
+        final Vec3 start;       // segment start position
+        final Vec3 end;         // segment end position
+        final double length;    // Euclidean distance
+
+        PathSegment(Vec3 start, Vec3 end) {
+            this.start = start;
+            this.end = end;
+            this.length = start.distanceTo(end);
+        }
+    }
+
+    // --- Singleton ---
 
     private static SweepExecutor instance;
 
@@ -42,14 +59,16 @@ public class SweepExecutor {
 
     private State state = State.IDLE;
     private final List<Vec3> stationPath = new ArrayList<>();
-    private int currentStationIndex = 0;
-    private Vec3 targetPosition = null;
+    private final List<PathSegment> segments = new ArrayList<>();
+    private final List<Double> cumulativeDist = new ArrayList<>(); // distance from start to each station
+    private double totalPathLength = 0.0;
+    private double distanceTraveled = 0.0;  // how far along the path we are
+    private int currentStationIndex = 0;     // derived: next station we're heading toward
     private BlockPos cuboidMin = null;
     private BlockPos cuboidMax = null;
     private int radius = 4;
     private String errorMessage = "";
     private int totalStations = 0;
-    private int waitTicks = 0;
 
     // --- Public API ---
 
@@ -64,19 +83,13 @@ public class SweepExecutor {
             return;
         }
 
-        // Clear any saved pause state on fresh start
         SweepState.clearPauseState();
 
         radius = SweepState.getRadius();
-
         cuboidMin = new BlockPos(SweepState.getMinX(), SweepState.getMinY(), SweepState.getMinZ());
         cuboidMax = new BlockPos(SweepState.getMaxX(), SweepState.getMaxY(), SweepState.getMaxZ());
 
-        stationPath.clear();
-        currentStationIndex = 0;
-        totalStations = 0;
-        waitTicks = 0;
-        errorMessage = "";
+        resetPath();
 
         state = State.BUILD_PATH;
         SweepState.setRunning(true);
@@ -84,16 +97,15 @@ public class SweepExecutor {
 
     public void stop() {
         state = State.IDLE;
-        stationPath.clear();
-        targetPosition = null;
+        resetPath();
         SweepState.setRunning(false);
         SweepState.clearPauseState();
     }
 
-    /** Pause at the current station — progress is persisted to disk. */
+    /** Pause at the current position — progress is persisted to disk. */
     public void pause() {
-        if (state != State.MOVE_TO_STATION && state != State.ADVANCE) return;
-        SweepState.savePauseState(currentStationIndex);
+        if (state != State.MOVING) return;
+        SweepState.savePauseStationIndex(currentStationIndex);
         state = State.PAUSED;
     }
 
@@ -105,13 +117,7 @@ public class SweepExecutor {
         cuboidMin = new BlockPos(SweepState.getMinX(), SweepState.getMinY(), SweepState.getMinZ());
         cuboidMax = new BlockPos(SweepState.getMaxX(), SweepState.getMaxY(), SweepState.getMaxZ());
 
-        stationPath.clear();
-        stationPath.addAll(buildSnakePath(
-            cuboidMin.getX(), cuboidMax.getX(),
-            cuboidMin.getY(), cuboidMax.getY(),
-            cuboidMin.getZ(), cuboidMax.getZ(),
-            radius));
-        totalStations = stationPath.size();
+        if (!buildPathAndSegments()) return false;
 
         int saved = SweepState.getSavedStationIndex();
         if (saved < 0 || saved >= totalStations) {
@@ -120,16 +126,15 @@ public class SweepExecutor {
         }
 
         currentStationIndex = saved;
-        targetPosition = stationPath.get(currentStationIndex);
-        waitTicks = 0;
+        distanceTraveled = saved > 0 ? cumulativeDist.get(saved - 1) + segments.get(saved - 1).length : 0.0;
         errorMessage = "";
         SweepState.clearPauseState();
         SweepState.setRunning(true);
-        state = State.MOVE_TO_STATION;
+        state = State.MOVING;
         return true;
     }
 
-    public boolean isRunning() { return state != State.IDLE && state != State.DONE && state != State.ERROR && state != State.PAUSED; }
+    public boolean isRunning() { return state == State.MOVING; }
     public boolean isPaused() { return state == State.PAUSED; }
     public boolean isDone() { return state == State.DONE; }
     public boolean isError() { return state == State.ERROR; }
@@ -145,33 +150,153 @@ public class SweepExecutor {
         return SweepState.hasPositions();
     }
 
-    /**
-     * Computes the snake-path station list from the current SweepState
-     * without starting the executor. Useful for path preview when
-     * {@code /csweep show path} is enabled.
-     */
+    // --- Path preview ---
+
     public static List<Vec3> computePreviewPath() {
         if (!SweepState.hasPositions()) return List.of();
-
-        int radius = SweepState.getRadius();
-        int minX = SweepState.getMinX(), maxX = SweepState.getMaxX();
-        int minY = SweepState.getMinY(), maxY = SweepState.getMaxY();
-        int minZ = SweepState.getMinZ(), maxZ = SweepState.getMaxZ();
-
-        return buildSnakePath(minX, maxX, minY, maxY, minZ, maxZ, radius);
+        int r = SweepState.getRadius();
+        return buildSnakePath(
+            SweepState.getMinX(), SweepState.getMaxX(),
+            SweepState.getMinY(), SweepState.getMaxY(),
+            SweepState.getMinZ(), SweepState.getMaxZ(), r);
     }
 
-    /**
-     * Shared snake-path algorithm: pre-computed fixed station positions,
-     * X direction continuous across rows, Z sweep alternates per
-     * layer but starts from where the previous layer ended (no
-     * diagonal return to origin between layers).
-     */
+    // --- Tick ---
+
+    public void tick(Minecraft client) {
+        if (state != State.BUILD_PATH && state != State.MOVING) return;
+        if (client.player == null || client.level == null || client.player.connection == null) return;
+
+        switch (state) {
+            case BUILD_PATH -> doBuildPath(client);
+            case MOVING     -> doMove(client);
+            default -> {}
+        }
+    }
+
+    // --- BUILD_PATH ---
+
+    private void doBuildPath(Minecraft client) {
+        if (!buildPathAndSegments()) return;
+        distanceTraveled = 0.0;
+        currentStationIndex = 1; // heading to first station
+        state = State.MOVING;
+    }
+
+    private boolean buildPathAndSegments() {
+        stationPath.clear();
+        stationPath.addAll(buildSnakePath(
+            cuboidMin.getX(), cuboidMax.getX(),
+            cuboidMin.getY(), cuboidMax.getY(),
+            cuboidMin.getZ(), cuboidMax.getZ(), radius));
+        totalStations = stationPath.size();
+        if (stationPath.isEmpty()) {
+            error("No stations in path");
+            return false;
+        }
+
+        // Build segments and cumulative distances
+        segments.clear();
+        cumulativeDist.clear();
+        cumulativeDist.add(0.0); // distance at station 0
+        double cum = 0.0;
+        for (int i = 0; i < stationPath.size() - 1; i++) {
+            PathSegment seg = new PathSegment(stationPath.get(i), stationPath.get(i + 1));
+            segments.add(seg);
+            cum += seg.length;
+            cumulativeDist.add(cum);
+        }
+        totalPathLength = cum;
+        return true;
+    }
+
+    // --- MOVING (continuous interpolation) ---
+
+    private void doMove(Minecraft client) {
+        if (segments.isEmpty()) {
+            finish();
+            return;
+        }
+
+        // Advance along the path at constant speed
+        double step = SweepState.getSpeed() / 20.0;
+        distanceTraveled += step;
+
+        if (distanceTraveled >= totalPathLength) {
+            // Reached end — snap to final station
+            Vec3 end = stationPath.get(stationPath.size() - 1);
+            client.player.setPos(end.x, end.y, end.z);
+            client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
+                end.x, end.y, end.z, client.player.onGround()));
+            finish();
+            return;
+        }
+
+        // Find which segment we're in
+        int segIdx = findSegment(distanceTraveled);
+        currentStationIndex = segIdx + 1; // next station we're heading toward
+
+        // Interpolate position along this segment
+        PathSegment seg = segments.get(segIdx);
+        double segStartDist = cumulativeDist.get(segIdx);
+        double t = seg.length > 0 ? (distanceTraveled - segStartDist) / seg.length : 0.0;
+        t = Math.max(0.0, Math.min(1.0, t));
+
+        Vec3 pos = seg.start.add(
+            (seg.end.x - seg.start.x) * t,
+            (seg.end.y - seg.start.y) * t,
+            (seg.end.z - seg.start.z) * t
+        );
+
+        client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
+            pos.x, pos.y, pos.z, client.player.onGround()));
+        client.player.setPos(pos.x, pos.y, pos.z);
+    }
+
+    /** Binary search for the segment containing the given distance. */
+    private int findSegment(double dist) {
+        int lo = 0, hi = segments.size() - 1;
+        while (lo < hi) {
+            int mid = (lo + hi + 1) >>> 1;
+            if (cumulativeDist.get(mid) <= dist) {
+                lo = mid;
+            } else {
+                hi = mid - 1;
+            }
+        }
+        return lo;
+    }
+
+    // --- Completion ---
+
+    private void finish() {
+        state = State.DONE;
+        currentStationIndex = totalStations;
+        SweepState.setRunning(false);
+    }
+
+    private void error(String msg) {
+        errorMessage = msg;
+        state = State.ERROR;
+        SweepState.setRunning(false);
+    }
+
+    private void resetPath() {
+        stationPath.clear();
+        segments.clear();
+        cumulativeDist.clear();
+        totalPathLength = 0.0;
+        distanceTraveled = 0.0;
+        currentStationIndex = 0;
+        totalStations = 0;
+    }
+
+    // --- Shared snake-path algorithm ---
+
     private static List<Vec3> buildSnakePath(int minX, int maxX, int minY, int maxY,
                                               int minZ, int maxZ, int radius) {
         double spacing = Math.max(1.0, radius * 1.5);
 
-        // Pre-compute station positions for each axis (fixed, uniform)
         int xCols = (int) Math.ceil((maxX - minX) / spacing) + 1;
         List<Integer> xStations = new ArrayList<>(xCols);
         for (int xi = 0; xi < xCols; xi++) {
@@ -189,14 +314,13 @@ public class SweepExecutor {
         int yLevels = (int) Math.ceil((maxY - minY) / spacing) + 1;
 
         List<Vec3> path = new ArrayList<>();
-        boolean goForwardX = true;      // X direction, continuous across layers
-        boolean sweepZForward = true;   // Z sweep direction, alternates per layer
+        boolean goForwardX = true;
+        boolean sweepZForward = true;
 
         for (int yi = 0; yi < yLevels; yi++) {
             int y = maxY - (int) Math.round(yi * spacing);
             y = Math.max(minY, Math.min(maxY, y));
 
-            // Sweep through Z rows in current direction
             for (int ziActual = 0; ziActual < zRows; ziActual++) {
                 int zi = sweepZForward ? ziActual : (zRows - 1 - ziActual);
                 int z = zStations.get(zi);
@@ -214,108 +338,9 @@ public class SweepExecutor {
                 }
                 goForwardX = !goForwardX;
             }
-
             sweepZForward = !sweepZForward;
         }
 
         return path;
-    }
-
-    // --- Tick ---
-
-    public void tick(Minecraft client) {
-        if (state == State.IDLE || state == State.DONE || state == State.ERROR || state == State.PAUSED) return;
-        if (client.player == null || client.level == null || client.player.connection == null) return;
-
-        switch (state) {
-            case BUILD_PATH      -> doBuildPath(client);
-            case MOVE_TO_STATION -> doMoveToStation(client);
-            case ADVANCE         -> doAdvance(client);
-            default -> {}
-        }
-    }
-
-    // --- BUILD_PATH ---
-
-    private void doBuildPath(Minecraft client) {
-        stationPath.clear();
-        stationPath.addAll(buildSnakePath(
-            cuboidMin.getX(), cuboidMax.getX(),
-            cuboidMin.getY(), cuboidMax.getY(),
-            cuboidMin.getZ(), cuboidMax.getZ(),
-            radius));
-
-        totalStations = stationPath.size();
-        if (stationPath.isEmpty()) {
-            error("No stations in path — area may be too small");
-            return;
-        }
-
-        currentStationIndex = 0;
-        targetPosition = stationPath.get(0);
-        state = State.MOVE_TO_STATION;
-    }
-
-    // --- MOVE_TO_STATION ---
-
-    /**
-     * Coordinate-based flight toward the current target.
-     * Uses position-only packets so the player keeps full camera control.
-     * Transitions to ADVANCE once the player arrives.
-     */
-    private void doMoveToStation(Minecraft client) {
-        Vec3 current = client.player.position();
-        Vec3 delta = targetPosition.subtract(current);
-        double distance = delta.length();
-
-        if (distance <= 0.5) {
-            // Snap to exact target, keep player's own rotation
-            client.player.setPos(targetPosition.x, targetPosition.y, targetPosition.z);
-            client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-                targetPosition.x, targetPosition.y, targetPosition.z,
-                client.player.onGround()
-            ));
-            if (waitTicks < 3) { waitTicks++; return; }
-            waitTicks = 0;
-            state = State.ADVANCE;
-            return;
-        }
-
-        waitTicks = 0;
-        double maxMove = SweepState.getSpeed() / 20.0;
-        double moveAmount = Math.min(maxMove, distance);
-        Vec3 direction = delta.normalize();
-        Vec3 newPos = current.add(direction.scale(moveAmount));
-
-        // Position-only packet — does not affect player rotation
-        client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-            newPos.x, newPos.y, newPos.z, client.player.onGround()
-        ));
-        client.player.setPos(newPos.x, newPos.y, newPos.z);
-    }
-
-    // --- ADVANCE ---
-
-    private void doAdvance(Minecraft client) {
-        currentStationIndex++;
-        if (currentStationIndex >= stationPath.size()) {
-            finish();
-            return;
-        }
-        targetPosition = stationPath.get(currentStationIndex);
-        state = State.MOVE_TO_STATION;
-    }
-
-    // --- Completion ---
-
-    private void finish() {
-        state = State.DONE;
-        SweepState.setRunning(false);
-    }
-
-    private void error(String msg) {
-        errorMessage = msg;
-        state = State.ERROR;
-        SweepState.setRunning(false);
     }
 }
