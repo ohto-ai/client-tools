@@ -5,17 +5,19 @@
 
 Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/releases)
 
-**客户端自动化工具集：自动合成链执行、定时命令调度、快捷聊天发送 / A collection of client-side automation tools: automated crafting chain execution, timed command scheduler, and quick chat sender.**
+**客户端自动化工具集：自动合成、定时调度、快捷聊天、飞行控制、蛇形扫掠 / A collection of client-side automation tools: auto crafting, timed scheduler, quick chat, flight toggle, and snake-pattern area traversal.**
 
 ---
 
 ## Introduction
 
-`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides three practical automation tools to improve your gameplay efficiency:
+`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides five practical automation tools:
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
 - **`/cchat`** — Quick chat message sender
+- **`/cfly`** — Flight toggle with jump and status display
+- **`/csweep`** — Snake-pattern area traversal for automated clearing (works with projection printers and auto-mining mods)
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -23,11 +25,13 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供三个实用的自动化工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供五个实用工具：
 
-- **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成，单项设置清除，自定义高亮时长与颜色
+- **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
 - **`/cchat`** — 快捷聊天消息发送
+- **`/cfly`** — 飞行开关，支持起跳和状态查看
+- **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机和自动挖掘 mod 实现区域清空
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -54,6 +58,24 @@ All features run entirely on the client side. No server-side installation is req
 - Configurable repeat count or infinite loop
 - List, stop all, or stop by pattern matching
 - Multiple independent timers run concurrently
+
+### `/cfly` — Flight Toggle
+
+- Toggle flight on/off with a single command
+- `jump` subcommand to enable flight and jump simultaneously
+- `status` subcommand to check flight permission, active state, and gamemode
+- Automatically syncs abilities to the server
+
+### `/csweep` — Snake-Pattern Area Traversal
+
+- Select a cuboid area with two corner positions (`pos1` / `pos2`)
+- Snake-pattern path generation with configurable station spacing (based on radius)
+- Coordinate-based flight movement — naturally handles liquid slowdown
+- **Does not lock camera** — uses position-only packets, you keep full view control
+- Independent highlight toggles: green outline wireframe, cyan path preview (gray for visited segments)
+- **Pause & resume with full persistence** — progress survives game restarts
+- Live speed adjustment — change flight speed mid-operation
+- Designed to work alongside projection printers and auto-mining mods
 
 ### `/cchat` — Quick Chat Sender
 
@@ -120,6 +142,41 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /ctimer stop                  — Stop all timers
 /ctimer stop Hello            — Stop timers whose command matches "Hello"
 ```
+
+### `/cfly` Quick Start
+
+```
+/cfly                    — Toggle flight on/off
+/cfly jump               — Enable flight and jump
+/cfly status             — Check flight state
+```
+
+### `/csweep` Quick Start
+
+```
+--- Setup ---
+/csweep pos1              — Set first corner (look at block, or use player position)
+/csweep pos1 100 64 200   — Set first corner manually
+/csweep pos2              — Set opposite corner
+/csweep radius 5          — Set station spacing radius (default 4, range 1–64)
+/csweep speed 15          — Set flight speed in blocks/sec (default 10, range 0.5–100)
+
+--- Highlight ---
+/csweep show              — Check current show settings
+/csweep show outline      — Toggle green cuboid wireframe
+/csweep show path         — Toggle cyan snake-path preview (works before starting!)
+
+--- Control ---
+/csweep start             — Start sweep (or resume if paused state exists)
+/csweep pause             — Pause at current station (progress saved to disk)
+/csweep stop              — Stop and clear pause state
+/csweep status            — View config, progress, and pause state
+/csweep reset             — Clear all settings
+```
+
+**Persistence:** Pause state (current station index) is saved per-world to `config/client-tools/sweep/<world-id>.json`. You can disconnect, restart the game, and resume from where you left off with `/csweep start`.
+
+**Speed adjustment:** Change speed anytime with `/csweep speed <value>` — takes effect immediately even while running.
 
 ### `/cchat` Quick Start
 
