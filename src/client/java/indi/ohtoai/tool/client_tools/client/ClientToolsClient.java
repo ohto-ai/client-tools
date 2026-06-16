@@ -8,10 +8,13 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import indi.ohtoai.tool.client_tools.client.command.CchatCommand;
 import indi.ohtoai.tool.client_tools.client.command.CcraftCommand;
 import indi.ohtoai.tool.client_tools.client.command.CflyCommand;
+import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
+import indi.ohtoai.tool.client_tools.client.sweep.SweepHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.timer.TimerManager;
 
 public class ClientToolsClient implements ClientModInitializer {
@@ -23,17 +26,23 @@ public class ClientToolsClient implements ClientModInitializer {
 			CchatCommand.register(dispatcher);
 			CcraftCommand.register(dispatcher);
 			CflyCommand.register(dispatcher);
+			CsweepCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor
 		ClientTickEvents.END_CLIENT_TICK.register(client -> {
 			TimerManager.tick(client);
 			CraftingExecutor.getInstance().tick(client);
+			SweepExecutor.getInstance().tick(client);
 			CcraftHighlightRenderer.tick();
+			SweepHighlightRenderer.tick();
 		});
 
 		// Register world render callback for block highlight overlay
-		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(CcraftHighlightRenderer::render);
+		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> {
+			CcraftHighlightRenderer.render(context);
+			SweepHighlightRenderer.render(context);
+		});
 
 		// Auto-show highlight on world join when positions are already configured
 		ClientPlayConnectionEvents.JOIN.register((handler, sender, client) -> {
