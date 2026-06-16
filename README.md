@@ -7,6 +7,8 @@ Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/relea
 
 **客户端自动化工具集：自动合成、定时调度、快捷聊天、飞行控制、蛇形扫掠 / A collection of client-side automation tools: auto crafting, timed scheduler, quick chat, flight toggle, and snake-pattern area traversal.**
 
+<img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/185dd107-1aa6-43c7-88ce-6ce60d59d488" />
+
 ---
 
 ## Introduction
