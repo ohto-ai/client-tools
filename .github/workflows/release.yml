@@ -12,6 +12,7 @@ jobs:
       mod-version: ${{ steps.properties.outputs.mod_version }}
       minecraft-version: ${{ steps.properties.outputs.minecraft_version }}
       curse-versions: ${{ steps.properties.outputs.release-curse-versions }}
+      curse-display: ${{ steps.properties.outputs.release-curse-display }}
     steps:
       - uses: actions/checkout@v4
       - name: Determine release type
@@ -26,7 +27,7 @@ jobs:
         id: properties
         run: |
           path='./gradle.properties'
-          for property in mod_version minecraft_version release-curse-versions
+          for property in mod_version minecraft_version release-curse-versions release-curse-display
           do
             result=$(sed -n "/^[[:space:]]*$property[[:space:]]*=[[:space:]]*/s/^[[:space:]]*$property[[:space:]]*=[[:space:]]*//p" "$path")
             echo "$property=$result" >> $GITHUB_OUTPUT
@@ -108,5 +109,5 @@ jobs:
           token: "${{ secrets.CF_API_TOKEN }}"
           changelog_type: markdown
           changelog: ${{ github.event.release.body }}
-          display_name: ClientTools v${{ needs.Get-Properties.outputs.mod-version }} for ${{ needs.Get-Properties.outputs.curse-versions }}
+          display_name: ClientTools v${{ needs.Get-Properties.outputs.mod-version }} for ${{ needs.Get-Properties.outputs.curse-display }}
           release_type: ${{ needs.Get-Properties.outputs.release-type }}
