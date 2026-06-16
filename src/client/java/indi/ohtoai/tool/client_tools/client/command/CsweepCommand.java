@@ -109,6 +109,16 @@ public class CsweepCommand {
                         .executes(ctx -> toggleOutline(ctx.getSource())))
                     .then(literal("path")
                         .executes(ctx -> togglePath(ctx.getSource()))))
+                // ---- expand ----
+                .then(literal("expand")
+                    .then(argument("blocks", IntegerArgumentType.integer(1))
+                        .executes(ctx -> expandCuboid(ctx.getSource(),
+                            IntegerArgumentType.getInteger(ctx, "blocks")))))
+                // ---- contract ----
+                .then(literal("contract")
+                    .then(argument("blocks", IntegerArgumentType.integer(1))
+                        .executes(ctx -> contractCuboid(ctx.getSource(),
+                            IntegerArgumentType.getInteger(ctx, "blocks")))))
                 // ---- start ----
                 .then(literal("start")
                     .executes(ctx -> startSweep(ctx.getSource())))
@@ -176,6 +186,114 @@ public class CsweepCommand {
             source.sendFeedback(Component.translatable("client-tools.csweep.show_outline_on"));
         }
         return 1;
+    }
+
+    // ==================== expand / shrink ====================
+
+    /**
+     * Determines which face of the cuboid the player is facing and adjusts
+     * that bound outward (expand) or inward (shrink) by the given amount.
+     */
+    private static int adjustCuboid(FabricClientCommandSource source, int blocks, boolean expand) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
+            return 0;
+        }
+        if (!SweepState.hasPositions()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.pos_not_set"));
+            return 0;
+        }
+
+        BlockPos p1 = SweepState.getPos1();
+        BlockPos p2 = SweepState.getPos2();
+
+        // Get player's look direction
+        var look = client.player.getLookAngle();
+        double ax = Math.abs(look.x), ay = Math.abs(look.y), az = Math.abs(look.z);
+
+        String action = expand ? "expand" : "contract";
+        int newVal;
+        BlockPos newP1, newP2;
+
+        // Detemine which face: dominant axis + sign
+        if (ay >= ax && ay >= az) {
+            // Vertical — looking up or down
+            if (look.y > 0) {
+                // Looking up — expand maxY / shrink maxY
+                int maxY = Math.max(p1.getY(), p2.getY());
+                newVal = expand ? maxY + blocks : maxY - blocks;
+                if (!expand && newVal < Math.min(p1.getY(), p2.getY())) newVal = Math.min(p1.getY(), p2.getY());
+                newP1 = p1.getY() == maxY ? new BlockPos(p1.getX(), newVal, p1.getZ()) : p1;
+                newP2 = p2.getY() == maxY ? new BlockPos(p2.getX(), newVal, p2.getZ()) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            } else {
+                // Looking down — expand minY / shrink minY
+                int minY = Math.min(p1.getY(), p2.getY());
+                newVal = expand ? minY - blocks : minY + blocks;
+                if (!expand && newVal > Math.max(p1.getY(), p2.getY())) newVal = Math.max(p1.getY(), p2.getY());
+                newP1 = p1.getY() == minY ? new BlockPos(p1.getX(), newVal, p1.getZ()) : p1;
+                newP2 = p2.getY() == minY ? new BlockPos(p2.getX(), newVal, p2.getZ()) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            }
+            source.sendFeedback(Component.translatable("client-tools.csweep." + action, blocks, "Y"));
+        } else if (ax >= az) {
+            // Horizontal — X dominant
+            if (look.x > 0) {
+                // Looking +X — expand maxX
+                int maxX = Math.max(p1.getX(), p2.getX());
+                newVal = expand ? maxX + blocks : maxX - blocks;
+                if (!expand && newVal < Math.min(p1.getX(), p2.getX())) newVal = Math.min(p1.getX(), p2.getX());
+                newP1 = p1.getX() == maxX ? new BlockPos(newVal, p1.getY(), p1.getZ()) : p1;
+                newP2 = p2.getX() == maxX ? new BlockPos(newVal, p2.getY(), p2.getZ()) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            } else {
+                // Looking -X — expand minX
+                int minX = Math.min(p1.getX(), p2.getX());
+                newVal = expand ? minX - blocks : minX + blocks;
+                if (!expand && newVal > Math.max(p1.getX(), p2.getX())) newVal = Math.max(p1.getX(), p2.getX());
+                newP1 = p1.getX() == minX ? new BlockPos(newVal, p1.getY(), p1.getZ()) : p1;
+                newP2 = p2.getX() == minX ? new BlockPos(newVal, p2.getY(), p2.getZ()) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            }
+            source.sendFeedback(Component.translatable("client-tools.csweep." + action, blocks, "X"));
+        } else {
+            // Horizontal — Z dominant
+            if (look.z > 0) {
+                // Looking +Z — expand maxZ
+                int maxZ = Math.max(p1.getZ(), p2.getZ());
+                newVal = expand ? maxZ + blocks : maxZ - blocks;
+                if (!expand && newVal < Math.min(p1.getZ(), p2.getZ())) newVal = Math.min(p1.getZ(), p2.getZ());
+                newP1 = p1.getZ() == maxZ ? new BlockPos(p1.getX(), p1.getY(), newVal) : p1;
+                newP2 = p2.getZ() == maxZ ? new BlockPos(p2.getX(), p2.getY(), newVal) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            } else {
+                // Looking -Z — expand minZ
+                int minZ = Math.min(p1.getZ(), p2.getZ());
+                newVal = expand ? minZ - blocks : minZ + blocks;
+                if (!expand && newVal > Math.max(p1.getZ(), p2.getZ())) newVal = Math.max(p1.getZ(), p2.getZ());
+                newP1 = p1.getZ() == minZ ? new BlockPos(p1.getX(), p1.getY(), newVal) : p1;
+                newP2 = p2.getZ() == minZ ? new BlockPos(p2.getX(), p2.getY(), newVal) : p2;
+                SweepState.setPos1(newP1);
+                SweepState.setPos2(newP2);
+            }
+            source.sendFeedback(Component.translatable("client-tools.csweep." + action, blocks, "Z"));
+        }
+
+        return 1;
+    }
+
+    private static int expandCuboid(FabricClientCommandSource source, int blocks) {
+        return adjustCuboid(source, blocks, true);
+    }
+
+    private static int contractCuboid(FabricClientCommandSource source, int blocks) {
+        return adjustCuboid(source, blocks, false);
     }
 
     // ==================== radius / speed ====================

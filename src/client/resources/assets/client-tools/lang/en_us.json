@@ -134,5 +134,7 @@
   "client-tools.csweep.resumed": "§aSweep resumed from station §e%d§e/§e%d§7.",
   "client-tools.csweep.resume_failed": "§cFailed to resume: saved state not found or world changed.",
   "client-tools.csweep.status_paused": "§aStatus: §ePAUSED §7(at station %d / %d)",
-  "client-tools.csweep.status_paused_saved": "§aStatus: §ePAUSED (saved) §7— use §e/csweep start §7to resume from station %d"
+  "client-tools.csweep.status_paused_saved": "§aStatus: §ePAUSED (saved) §7— use §e/csweep start §7to resume from station %d",
+  "client-tools.csweep.expand": "§aExpanded §e%d §ablocks along §e%s§a.",
+  "client-tools.csweep.contract": "§aContracted §e%d §ablocks along §e%s§a."
 }
