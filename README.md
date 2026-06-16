@@ -70,10 +70,11 @@ All features run entirely on the client side. No server-side installation is req
 
 - Select a cuboid area with two corner positions (`pos1` / `pos2`)
 - Snake-pattern path generation with configurable station spacing (based on radius)
-- Coordinate-based flight movement — naturally handles liquid slowdown
+- **Continuous smooth movement** — linear interpolation between stations at constant speed, no stop-and-go
+- **Dynamic cuboid adjustment** — expand or contract the cuboid boundary based on your viewing direction
 - **Does not lock camera** — uses position-only packets, you keep full view control
 - Independent highlight toggles: green outline wireframe, cyan path preview (gray for visited segments)
-- **Pause & resume with full persistence** — progress survives game restarts
+- **Pause & resume with full persistence** — progress survives game restarts, pause acts as toggle
 - Live speed adjustment — change flight speed mid-operation
 - Designed to work alongside projection printers and auto-mining mods
 
@@ -161,6 +162,10 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep radius 5          — Set station spacing radius (default 4, range 1–64)
 /csweep speed 15          — Set flight speed in blocks/sec (default 10, range 0.5–100)
 
+--- Adjust cuboid ---
+/csweep expand 5          — Expand the cuboid 5 blocks along the face you're looking at
+/csweep contract 3        — Shrink the cuboid 3 blocks along the face you're looking at
+
 --- Highlight ---
 /csweep show              — Check current show settings
 /csweep show outline      — Toggle green cuboid wireframe
@@ -168,7 +173,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 --- Control ---
 /csweep start             — Start sweep (or resume if paused state exists)
-/csweep pause             — Pause at current station (progress saved to disk)
+/csweep pause             — Pause at current station / resume if paused (toggle)
 /csweep stop              — Stop and clear pause state
 /csweep status            — View config, progress, and pause state
 /csweep reset             — Clear all settings
@@ -177,6 +182,10 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 **Persistence:** Pause state (current station index) is saved per-world to `config/client-tools/sweep/<world-id>.json`. You can disconnect, restart the game, and resume from where you left off with `/csweep start`.
 
 **Speed adjustment:** Change speed anytime with `/csweep speed <value>` — takes effect immediately even while running.
+
+**Cuboid adjustment:** Use `expand`/`contract` to adjust the cuboid boundary after setup. The mod determines which face to adjust based on your viewing direction — look at the face you want to move and run the command. Works for all six faces (±X, ±Y, ±Z).
+
+**Smooth movement:** The sweep no longer stops at each station. The player moves continuously along the path at constant speed with linear interpolation between waypoints — faster and more natural.
 
 ### `/cchat` Quick Start
 
