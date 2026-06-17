@@ -80,6 +80,8 @@ All features run entirely on the client side. No server-side installation is req
 - **Does not lock camera** — uses position-only packets, you keep full view control
 - Independent highlight toggles: green outline wireframe, cyan path preview (gray for visited segments)
 - **Pause & resume with full persistence** — progress survives game restarts, pause acts as toggle
+- **Auto-save on disconnect** — sweep progress is automatically saved when you disconnect, with a reconnect reminder
+- **Smooth approach** — when resuming far from the path, flies smoothly to the target instead of teleporting
 - **Mid-sweep resume** — find the nearest unvisited station to your current position with `/csweep nearest`
 - **Sub-region skip** — skip to the next Litematica sub-region with `/csweep next`
 - Live speed adjustment — change flight speed mid-operation
@@ -209,7 +211,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep reset             — Clear all settings
 ```
 
-**Persistence:** Pause state (current station index) is saved per-world to `config/client-tools/sweep/<world-id>.json`. You can disconnect, restart the game, and resume from where you left off with `/csweep start`.
+**Persistence:** Pause state (current station index) is saved per-world to `config/client-tools/sweep/<world-id>.json`. You can disconnect, restart the game, and resume from where you left off with `/csweep start`. If you disconnect mid-sweep, progress is automatically saved and you'll be reminded on rejoin.
 
 **Speed adjustment:** Change speed anytime with `/csweep speed <value>` — takes effect immediately even while running.
 
@@ -219,7 +221,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Litematica integration:** Enable with `/csweep litematica on` to automatically sync the sweep area with your active Litematica schematic's sub-regions. Each sub-region is swept sequentially. Use `/csweep litematica` to view detected regions and their coordinates. Requires Litematica to be installed. Setting manual positions auto-disables the sync.
 
-**Mid-sweep recovery:** If disconnected or teleported away mid-sweep, use `/csweep nearest` to find the closest unvisited station to your current position, then `/csweep start` to resume from there.
+**Mid-sweep recovery:** If disconnected or teleported away mid-sweep, use `/csweep nearest` to find the closest unvisited station to your current position, then `/csweep start` to resume from there. The executor flies you smoothly to the target station — no instant teleport.
 
 ### `/cchat` Quick Start
 
