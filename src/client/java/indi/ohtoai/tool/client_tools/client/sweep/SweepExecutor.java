@@ -1,6 +1,7 @@
 package indi.ohtoai.tool.client_tools.client.sweep;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.phys.Vec3;
 
@@ -229,6 +230,7 @@ public class SweepExecutor {
         resetApproach();
         SweepState.setRunning(false);
         SweepState.clearPauseState();
+        clearActionBar();
     }
 
     /** Jumps to the next sub-region if one exists. */
@@ -248,6 +250,7 @@ public class SweepExecutor {
         if (state != State.MOVING) return;
         SweepState.savePauseStationIndex(globalStationOffset + currentStationIndex);
         state = State.PAUSED;
+        showActionBarPaused();
     }
 
     /**
@@ -267,6 +270,7 @@ public class SweepExecutor {
             SweepState.markUnfinished(index);
             state = State.IDLE;
             resetPath();
+            clearActionBar();
         }
     }
 
@@ -362,6 +366,68 @@ public class SweepExecutor {
         completedRegionsLength = 0.0;
         for (int i = 0; i < currentRegionIndex && i < regions.size(); i++) {
             completedRegionsLength += regions.get(i).totalLength();
+        }
+    }
+
+    // --- Action bar (real-time progress during sweep) ---
+
+    private static final int ACTION_BAR_WIDTH = 10;
+
+    /** Updates the action bar with a compact progress bar, percentage, and ETA. */
+    private void updateActionBar(Minecraft client) {
+        if (totalAllRegionsLength <= 0 || client.player == null) return;
+
+        double completedDist = completedRegionsLength + distanceTraveled;
+        double fraction = Math.max(0.0, Math.min(1.0, completedDist / totalAllRegionsLength));
+        double pct = fraction * 100.0;
+
+        int filled = (int) Math.round(fraction * ACTION_BAR_WIDTH);
+        StringBuilder bar = new StringBuilder("§a[");
+        for (int i = 0; i < filled; i++) bar.append('█');
+        bar.append("§7");
+        for (int i = filled; i < ACTION_BAR_WIDTH; i++) bar.append('░');
+        bar.append("§a]");
+
+        double speed = SweepState.getSpeed();
+        double remainingDist = totalAllRegionsLength - completedDist;
+        long etaSeconds = speed > 0 ? (long) Math.ceil(remainingDist / speed) : 0;
+
+        int station = globalStationOffset + currentStationIndex;
+        String msg = bar + " §b" + String.format("%.1f", pct) + "%% §7| §e"
+            + compactEta(etaSeconds) + " §7| §f" + station + "/" + totalStations;
+        client.player.displayClientMessage(Component.literal(msg), true);
+    }
+
+    /** Clears the action bar (sends an empty string). */
+    private void clearActionBar() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.displayClientMessage(Component.literal(" "), true);
+        }
+    }
+
+    /** Shows a paused indicator on the action bar. */
+    private void showActionBarPaused() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return;
+        int station = globalStationOffset + currentStationIndex;
+        String msg = "§e⏸ PAUSED §7| §f" + station + "/" + totalStations
+            + " §7— §e/csweep pause §7to resume";
+        client.player.displayClientMessage(Component.literal(msg), true);
+    }
+
+    /** Compact ETA: "1h23m", "2m35s", "45s". */
+    private static String compactEta(long s) {
+        if (s >= 3600) {
+            long h = s / 3600;
+            long m = (s % 3600) / 60;
+            return h + "h" + m + "m";
+        } else if (s >= 60) {
+            long m = s / 60;
+            long sec = s % 60;
+            return m + "m" + sec + "s";
+        } else {
+            return s + "s";
         }
     }
 
@@ -602,6 +668,11 @@ public class SweepExecutor {
         } else {
             doMove(client);
         }
+
+        // Real-time action bar progress
+        if (client.player != null && (state == State.MOVING || state == State.APPROACHING)) {
+            updateActionBar(client);
+        }
     }
 
     // --- APPROACHING (smooth fly-in to path start) ---
@@ -787,6 +858,7 @@ public class SweepExecutor {
             state = State.DONE;
             currentStationIndex = totalStations;
             SweepState.setRunning(false);
+            clearActionBar();
         }
     }
 
@@ -794,6 +866,7 @@ public class SweepExecutor {
         errorMessage = msg;
         state = State.ERROR;
         SweepState.setRunning(false);
+        clearActionBar();
     }
 
     private void resetPath() {
