@@ -274,7 +274,7 @@ public class SweepHighlightRenderer {
         line(builder, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
         line(builder, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
 
-        BufferUploader.drawWithShader(builder.build());
+        safeDraw(builder);
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.lineWidth(1.0f);
@@ -321,7 +321,7 @@ public class SweepHighlightRenderer {
         line(builder, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
         line(builder, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
 
-        BufferUploader.drawWithShader(builder.build());
+        safeDraw(builder);
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.lineWidth(1.0f);
@@ -329,6 +329,21 @@ public class SweepHighlightRenderer {
     }
 
     // --- Path lines ---
+
+    /**
+     * Safely draw a built buffer, ignoring rendering errors
+     * (e.g., empty buffer with null mesh data on some drivers).
+     */
+    private static void safeDraw(BufferBuilder builder) {
+        try {
+            MeshData mesh = builder.build();
+            if (mesh != null) {
+                BufferUploader.drawWithShader(mesh);
+            }
+        } catch (Exception ignored) {
+            // Buffer may be empty or in an invalid state — skip rendering
+        }
+    }
 
     /**
      * Draws connected line segments for a range of the station path.
@@ -384,7 +399,7 @@ public class SweepHighlightRenderer {
                     line(builder, matrix, p0x, p0y, p0z, p1x, p1y, p1z, r, g, b, dimAlpha);
                 }
 
-                BufferUploader.drawWithShader(builder.build());
+                safeDraw(builder);
                 RenderSystem.enableDepthTest();
                 RenderSystem.disableBlend();
                 RenderSystem.lineWidth(1.0f);
@@ -457,7 +472,7 @@ public class SweepHighlightRenderer {
                     }
                 }
 
-                BufferUploader.drawWithShader(builder2.build());
+                safeDraw(builder2);
                 RenderSystem.enableDepthTest();
                 RenderSystem.disableBlend();
                 RenderSystem.lineWidth(1.0f);
@@ -488,7 +503,7 @@ public class SweepHighlightRenderer {
                 line(builder, matrix, p0x, p0y, p0z, p1x, p1y, p1z, r, g, b, a);
             }
 
-            BufferUploader.drawWithShader(builder.build());
+            safeDraw(builder);
             RenderSystem.enableDepthTest();
             RenderSystem.disableBlend();
             RenderSystem.lineWidth(1.0f);
@@ -577,7 +592,7 @@ public class SweepHighlightRenderer {
         float my = (fy + ty) * 0.5f;
         float mz = (fz + tz) * 0.5f;
 
-        BufferUploader.drawWithShader(builder.build());
+        safeDraw(builder);
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.lineWidth(1.0f);
@@ -643,7 +658,7 @@ public class SweepHighlightRenderer {
         // Beacon
         line(builder, matrix, sx, sy + half, sz, sx, sy + beacon, sz, r, g, b, a * 0.5f);
 
-        BufferUploader.drawWithShader(builder.build());
+        safeDraw(builder);
         RenderSystem.enableDepthTest();
         RenderSystem.disableBlend();
         RenderSystem.lineWidth(1.0f);

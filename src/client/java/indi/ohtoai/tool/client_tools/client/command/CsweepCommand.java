@@ -587,9 +587,11 @@ public class CsweepCommand {
             int sdx = bx2 - bx1;
             int sdy = by2 - by1;
             int sdz = bz2 - bz1;
-            estStations += ((int) Math.ceil(sdx / spacing) + 1)
-                         * ((int) Math.ceil(sdy / spacing) + 1)
-                         * ((int) Math.ceil(sdz / spacing) + 1);
+            double estRadius = spacing / 1.5;
+            int nx = 1 + (int) Math.ceil(Math.max(0, sdx - estRadius) / spacing);
+            int ny = 1 + (int) Math.ceil(Math.max(0, sdy - estRadius) / spacing);
+            int nz = 1 + (int) Math.ceil(Math.max(0, sdz - estRadius) / spacing);
+            estStations += nx * ny * nz;
             volume += (long) (sdx + 1) * (sdy + 1) * (sdz + 1);
         }
         String volumeStr = volume >= 1_000_000 ? String.format("%.1fM", volume / 1_000_000.0)

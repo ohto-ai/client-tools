@@ -893,25 +893,38 @@ public class SweepExecutor {
 
     // --- Shared snake-path algorithm ---
 
+    /**
+     * Compute the minimum number of stations needed to cover {@code [min, max]}
+     * with stations spaced by {@code spacing} where each station covers a radius
+     * of {@code spacing / 1.5}.  The first station sits at {@code min}, and extra
+     * stations are added only when the previous station's coverage does not reach
+     * {@code max}.
+     */
+    private static int stationsForRange(int min, int max, double spacing) {
+        double radius = spacing / 1.5;
+        int extra = (int) Math.ceil(Math.max(0.0, (max - min) - radius) / spacing);
+        return 1 + extra;
+    }
+
     private static List<Vec3> buildSnakePath(int minX, int maxX, int minY, int maxY,
                                               int minZ, int maxZ, int radius) {
         double spacing = Math.max(1.0, radius * 1.5);
 
-        int xCols = (int) Math.ceil((maxX - minX) / spacing) + 1;
+        int xCols = stationsForRange(minX, maxX, spacing);
         List<Integer> xStations = new ArrayList<>(xCols);
         for (int xi = 0; xi < xCols; xi++) {
             int x = minX + (int) Math.round(xi * spacing);
             xStations.add(Math.max(minX, Math.min(maxX, x)));
         }
 
-        int zRows = (int) Math.ceil((maxZ - minZ) / spacing) + 1;
+        int zRows = stationsForRange(minZ, maxZ, spacing);
         List<Integer> zStations = new ArrayList<>(zRows);
         for (int zi = 0; zi < zRows; zi++) {
             int z = minZ + (int) Math.round(zi * spacing);
             zStations.add(Math.max(minZ, Math.min(maxZ, z)));
         }
 
-        int yLevels = (int) Math.ceil((maxY - minY) / spacing) + 1;
+        int yLevels = stationsForRange(minY, maxY, spacing);
 
         List<Vec3> path = new ArrayList<>();
         boolean goForwardX = true;
