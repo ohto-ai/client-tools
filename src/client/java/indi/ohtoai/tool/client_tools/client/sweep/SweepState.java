@@ -31,6 +31,7 @@ public class SweepState {
     private static boolean running = false;
     private static int savedStationIndex = -1; // -1 = no paused state to resume
     private static boolean paused = false;
+    private static boolean unfinished = false;
     private static boolean syncLitematica = true;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -47,6 +48,7 @@ public class SweepState {
         boolean showPath = false;
         int savedStationIndex = -1;
         boolean paused = false;
+        boolean unfinished = false;
         Boolean syncLitematica; // boxed so missing (old config) defaults to true
     }
 
@@ -96,6 +98,7 @@ public class SweepState {
             running = false;
             savedStationIndex = -1;
             paused = false;
+            unfinished = false;
             syncLitematica = true;
             invalidateCache();
             load();
@@ -114,6 +117,7 @@ public class SweepState {
     public static boolean isRunning() { ensureLoaded(); return running; }
     public static int getSavedStationIndex() { ensureLoaded(); return savedStationIndex; }
     public static boolean isPaused() { ensureLoaded(); return paused; }
+    public static boolean isUnfinished() { ensureLoaded(); return unfinished; }
     public static boolean isSyncLitematica() { ensureLoaded(); return syncLitematica; }
 
     /**
@@ -207,6 +211,26 @@ public class SweepState {
         ensureLoaded();
         savedStationIndex = -1;
         paused = false;
+        unfinished = false;
+        save();
+    }
+
+    /**
+     * Marks the sweep as unfinished (disconnected mid-sweep).
+     * Called by the disconnect handler so the player is reminded on rejoin.
+     */
+    public static void markUnfinished(int stationIndex) {
+        ensureLoaded();
+        savedStationIndex = stationIndex;
+        paused = true;
+        unfinished = true;
+        running = false;
+        save();
+    }
+
+    public static void clearUnfinished() {
+        ensureLoaded();
+        unfinished = false;
         save();
     }
 
@@ -270,6 +294,7 @@ public class SweepState {
         running = false;
         savedStationIndex = -1;
         paused = false;
+        unfinished = false;
         syncLitematica = true;
         invalidateCache();
         save();
@@ -288,6 +313,7 @@ public class SweepState {
         data.showPath = showPath;
         data.savedStationIndex = savedStationIndex;
         data.paused = paused;
+        data.unfinished = unfinished;
         data.syncLitematica = syncLitematica;
 
         try {
@@ -311,6 +337,7 @@ public class SweepState {
             showPath = data.showPath;
             savedStationIndex = data.savedStationIndex;
             paused = data.paused;
+            unfinished = data.unfinished;
             syncLitematica = data.syncLitematica != null ? data.syncLitematica : true;
         } catch (IOException ignored) {}
     }

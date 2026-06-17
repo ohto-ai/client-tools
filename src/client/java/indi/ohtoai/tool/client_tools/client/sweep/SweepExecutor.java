@@ -26,7 +26,7 @@ import java.util.List;
 public class SweepExecutor {
 
     private enum State {
-        IDLE, BUILD_PATH, MOVING, PAUSED, ERROR, DONE
+        IDLE, BUILD_PATH, APPROACHING, MOVING, PAUSED, ERROR, DONE
     }
 
     // --- Inner data class for path segments ---
@@ -87,6 +87,13 @@ public class SweepExecutor {
     // Nearest-station highlight (set by /csweep nearest, consumed by /csweep start)
     private int nearestGlobalStationIndex = -1;
     private Vec3 nearestStationPos = null;
+
+    // Approach state (smooth fly-in from current position to path start)
+    private Vec3 approachOrigin = null;
+    private Vec3 approachTarget = null;
+    private double approachDistance = 0.0;
+    private double approachTraveled = 0.0;
+    private static final double APPROACH_THRESHOLD = 1.5; // skip approach if within this distance
 
     // --- Public API ---
 
@@ -149,13 +156,44 @@ public class SweepExecutor {
             if (!loadRegion(0)) return;
         }
 
-        state = State.MOVING;
-        SweepState.setRunning(true);
+        // Start smoothly: if the player is far from the first station,
+        // fly from current position to the first station before sweeping
+        beginMovementOrApproach(client);
+    }
+
+    /**
+     * Transitions to APPROACHING if the player is far from the path start,
+     * or directly to MOVING if already close enough.
+     */
+    private void beginMovementOrApproach(Minecraft client) {
+        if (stationPath.isEmpty()) {
+            error("No path stations");
+            return;
+        }
+
+        Vec3 playerPos = client.player.position();
+        Vec3 targetPos = stationPath.get(0);
+        double dist = playerPos.distanceTo(targetPos);
+
+        if (dist > APPROACH_THRESHOLD) {
+            // Fly smoothly from current position to the first station
+            approachOrigin = playerPos;
+            approachTarget = targetPos;
+            approachDistance = dist;
+            approachTraveled = 0.0;
+            state = State.APPROACHING;
+            SweepState.setRunning(true);
+        } else {
+            // Already close enough — start sweeping immediately
+            state = State.MOVING;
+            SweepState.setRunning(true);
+        }
     }
 
     public void stop() {
         state = State.IDLE;
         resetPath();
+        resetApproach();
         SweepState.setRunning(false);
         SweepState.clearPauseState();
     }
@@ -174,8 +212,28 @@ public class SweepExecutor {
     /** Pause at the current position — progress is persisted to disk. */
     public void pause() {
         if (state != State.MOVING) return;
-        SweepState.savePauseStationIndex(currentStationIndex);
+        SweepState.savePauseStationIndex(globalStationOffset + currentStationIndex);
         state = State.PAUSED;
+    }
+
+    /**
+     * Called on disconnect to auto-save sweep progress.
+     * If the sweep is running, saves the current position and marks
+     * the sweep as unfinished so the player is reminded on rejoin.
+     */
+    public void handleDisconnect() {
+        if (state == State.MOVING || state == State.APPROACHING) {
+            int index;
+            if (state == State.APPROACHING) {
+                // Haven't reached a station yet — save as station 0
+                index = globalStationOffset;
+            } else {
+                index = globalStationOffset + currentStationIndex;
+            }
+            SweepState.markUnfinished(index);
+            state = State.IDLE;
+            resetPath();
+        }
     }
 
     /** Resume from a previously paused sweep (multi-region aware). */
@@ -224,12 +282,51 @@ public class SweepExecutor {
 
         errorMessage = "";
         SweepState.clearPauseState();
+
+        // Compute the target position on the path at the resume point
+        Vec3 targetPos;
+        if (stationPath.isEmpty()) {
+            SweepState.clearPauseState();
+            return false;
+        }
+        if (distanceTraveled <= 0.0) {
+            targetPos = stationPath.get(0);
+        } else if (distanceTraveled >= totalPathLength) {
+            targetPos = stationPath.get(stationPath.size() - 1);
+        } else {
+            int segIdx = findSegment(distanceTraveled);
+            PathSegment seg = segments.get(segIdx);
+            double segStartDist = cumulativeDist.get(segIdx);
+            double t = seg.length > 0 ? (distanceTraveled - segStartDist) / seg.length : 0.0;
+            t = Math.max(0.0, Math.min(1.0, t));
+            targetPos = new Vec3(
+                seg.start.x + (seg.end.x - seg.start.x) * t,
+                seg.start.y + (seg.end.y - seg.start.y) * t,
+                seg.start.z + (seg.end.z - seg.start.z) * t
+            );
+        }
+
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return false;
+
+        Vec3 playerPos = client.player.position();
+        double dist = playerPos.distanceTo(targetPos);
+
+        if (dist > APPROACH_THRESHOLD) {
+            approachOrigin = playerPos;
+            approachTarget = targetPos;
+            approachDistance = dist;
+            approachTraveled = 0.0;
+            state = State.APPROACHING;
+        } else {
+            state = State.MOVING;
+        }
+
         SweepState.setRunning(true);
-        state = State.MOVING;
         return true;
     }
 
-    public boolean isRunning() { return state == State.MOVING; }
+    public boolean isRunning() { return state == State.MOVING || state == State.APPROACHING; }
     public boolean isPaused() { return state == State.PAUSED; }
     public boolean isDone() { return state == State.DONE; }
     public boolean isError() { return state == State.ERROR; }
@@ -347,10 +444,44 @@ public class SweepExecutor {
     // --- Tick ---
 
     public void tick(Minecraft client) {
-        if (state != State.MOVING) return;
+        if (state != State.MOVING && state != State.APPROACHING) return;
         if (client.player == null || client.level == null || client.player.connection == null) return;
 
-        doMove(client);
+        if (state == State.APPROACHING) {
+            doApproach(client);
+        } else {
+            doMove(client);
+        }
+    }
+
+    // --- APPROACHING (smooth fly-in to path start) ---
+
+    private void doApproach(Minecraft client) {
+        double step = SweepState.getSpeed() / 20.0;
+        approachTraveled += step;
+
+        if (approachTraveled >= approachDistance) {
+            // Arrived — snap to target and transition to MOVING
+            client.player.setPos(approachTarget.x, approachTarget.y, approachTarget.z);
+            client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
+                approachTarget.x, approachTarget.y, approachTarget.z, client.player.onGround()));
+            state = State.MOVING;
+            return;
+        }
+
+        // Smooth interpolation from origin to target
+        double t = approachDistance > 0 ? approachTraveled / approachDistance : 1.0;
+        t = Math.max(0.0, Math.min(1.0, t));
+
+        Vec3 pos = new Vec3(
+            approachOrigin.x + (approachTarget.x - approachOrigin.x) * t,
+            approachOrigin.y + (approachTarget.y - approachOrigin.y) * t,
+            approachOrigin.z + (approachTarget.z - approachOrigin.z) * t
+        );
+
+        client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
+            pos.x, pos.y, pos.z, client.player.onGround()));
+        client.player.setPos(pos.x, pos.y, pos.z);
     }
 
     // --- MOVING (continuous interpolation) ---
@@ -523,6 +654,13 @@ public class SweepExecutor {
         regions.clear();
         currentRegionIndex = 0;
         globalStationOffset = 0;
+    }
+
+    private void resetApproach() {
+        approachOrigin = null;
+        approachTarget = null;
+        approachDistance = 0.0;
+        approachTraveled = 0.0;
     }
 
     // --- Shared snake-path algorithm ---

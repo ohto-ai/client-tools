@@ -17,7 +17,9 @@ import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
 import indi.ohtoai.tool.client_tools.client.sequence.SequenceExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepHighlightRenderer;
+import indi.ohtoai.tool.client_tools.client.sweep.SweepState;
 import indi.ohtoai.tool.client_tools.client.timer.TimerManager;
+import net.minecraft.network.chat.Component;
 
 public class ClientToolsClient implements ClientModInitializer {
 	@Override
@@ -53,6 +55,25 @@ public class ClientToolsClient implements ClientModInitializer {
 			if (CcraftState.getInputPos() != null || CcraftState.getOutputPos() != null) {
 				CcraftHighlightRenderer.trigger();
 			}
+
+			// Remind about unfinished sweep after a short delay
+			// (so the player has fully loaded into the world)
+			if (SweepState.isUnfinished()) {
+				int savedStation = SweepState.getSavedStationIndex();
+				client.execute(() -> {
+					if (client.player != null) {
+						client.player.displayClientMessage(
+							Component.translatable("client-tools.csweep.reconnect_reminder",
+								savedStation + 1), false);
+					}
+				});
+				SweepState.clearUnfinished();
+			}
+		});
+
+		// Auto-pause sweep on disconnect to save progress
+		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
+			SweepExecutor.getInstance().handleDisconnect();
 		});
 	}
 }
