@@ -162,8 +162,8 @@ public class SweepExecutor {
     }
 
     /**
-     * Transitions to APPROACHING if the player is far from the path start,
-     * or directly to MOVING if already close enough.
+     * Transitions to APPROACHING if the player is far from the current
+     * position on the path, or directly to MOVING if already close enough.
      */
     private void beginMovementOrApproach(Minecraft client) {
         if (stationPath.isEmpty()) {
@@ -172,11 +172,30 @@ public class SweepExecutor {
         }
 
         Vec3 playerPos = client.player.position();
-        Vec3 targetPos = stationPath.get(0);
+
+        // Compute the actual target position on the path at distanceTraveled
+        Vec3 targetPos;
+        if (distanceTraveled <= 0.0) {
+            targetPos = stationPath.get(0);
+        } else if (distanceTraveled >= totalPathLength) {
+            targetPos = stationPath.get(stationPath.size() - 1);
+        } else {
+            int segIdx = findSegment(distanceTraveled);
+            PathSegment seg = segments.get(segIdx);
+            double segStartDist = cumulativeDist.get(segIdx);
+            double t = seg.length > 0 ? (distanceTraveled - segStartDist) / seg.length : 0.0;
+            t = Math.max(0.0, Math.min(1.0, t));
+            targetPos = new Vec3(
+                seg.start.x + (seg.end.x - seg.start.x) * t,
+                seg.start.y + (seg.end.y - seg.start.y) * t,
+                seg.start.z + (seg.end.z - seg.start.z) * t
+            );
+        }
+
         double dist = playerPos.distanceTo(targetPos);
 
         if (dist > APPROACH_THRESHOLD) {
-            // Fly smoothly from current position to the first station
+            // Fly smoothly from current position to the target station
             approachOrigin = playerPos;
             approachTarget = targetPos;
             approachDistance = dist;
@@ -283,46 +302,10 @@ public class SweepExecutor {
         errorMessage = "";
         SweepState.clearPauseState();
 
-        // Compute the target position on the path at the resume point
-        Vec3 targetPos;
-        if (stationPath.isEmpty()) {
-            SweepState.clearPauseState();
-            return false;
-        }
-        if (distanceTraveled <= 0.0) {
-            targetPos = stationPath.get(0);
-        } else if (distanceTraveled >= totalPathLength) {
-            targetPos = stationPath.get(stationPath.size() - 1);
-        } else {
-            int segIdx = findSegment(distanceTraveled);
-            PathSegment seg = segments.get(segIdx);
-            double segStartDist = cumulativeDist.get(segIdx);
-            double t = seg.length > 0 ? (distanceTraveled - segStartDist) / seg.length : 0.0;
-            t = Math.max(0.0, Math.min(1.0, t));
-            targetPos = new Vec3(
-                seg.start.x + (seg.end.x - seg.start.x) * t,
-                seg.start.y + (seg.end.y - seg.start.y) * t,
-                seg.start.z + (seg.end.z - seg.start.z) * t
-            );
-        }
-
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return false;
 
-        Vec3 playerPos = client.player.position();
-        double dist = playerPos.distanceTo(targetPos);
-
-        if (dist > APPROACH_THRESHOLD) {
-            approachOrigin = playerPos;
-            approachTarget = targetPos;
-            approachDistance = dist;
-            approachTraveled = 0.0;
-            state = State.APPROACHING;
-        } else {
-            state = State.MOVING;
-        }
-
-        SweepState.setRunning(true);
+        beginMovementOrApproach(client);
         return true;
     }
 
