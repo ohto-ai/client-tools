@@ -164,6 +164,7 @@
   "client-tools.csweep.litematica.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]",
   "client-tools.csweep.litematica.current_region": "§aCurrent region: §e%s §7(%d/%d)",
   "client-tools.csweep.status_regions": "§aRegions: §e%d",
+  "client-tools.csweep.status_progress": "§aProgress: [%s] §b%s%%  §aETA: §e%s",
 
   "client-tools.csequence.created": "§aSequence \"§e%s§a\" created.",
   "client-tools.csequence.create_failed": "§cFailed to create sequence: §e%s",

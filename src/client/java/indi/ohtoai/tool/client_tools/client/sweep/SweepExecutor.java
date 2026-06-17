@@ -83,6 +83,8 @@ public class SweepExecutor {
     private final List<RegionData> regions = new ArrayList<>();
     private int currentRegionIndex = 0;
     private int globalStationOffset = 0;
+    private double completedRegionsLength = 0.0;   // sum of totalLength for regions already finished
+    private double totalAllRegionsLength = 0.0;    // sum of totalLength for ALL regions
 
     // Nearest-station highlight (set by /csweep nearest, consumed by /csweep start)
     private int nearestGlobalStationIndex = -1;
@@ -166,6 +168,8 @@ public class SweepExecutor {
             if (!loadRegion(0)) return;
         }
 
+        recomputeCompletedRegionsLength();
+
         // Start smoothly: if the player is far from the first station,
         // fly from current position to the first station before sweeping
         beginMovementOrApproach(client);
@@ -231,6 +235,7 @@ public class SweepExecutor {
     public boolean skipToNextRegion() {
         if (state != State.MOVING && state != State.PAUSED) return false;
         if (currentRegionIndex >= regions.size() - 1) return false;
+        completedRegionsLength += regions.get(currentRegionIndex).totalLength();
         globalStationOffset += regions.get(currentRegionIndex).stationCount();
         currentRegionIndex++;
         if (!loadRegion(currentRegionIndex)) return false;
@@ -315,6 +320,7 @@ public class SweepExecutor {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) return false;
 
+        recomputeCompletedRegionsLength();
         beginMovementOrApproach(client);
         return true;
     }
@@ -337,6 +343,27 @@ public class SweepExecutor {
     }
     /** Returns the path for the currently active region only. */
     public List<Vec3> getStationPath() { return stationPath; }
+
+    // --- Progress tracking (distance-based, for status progress bar) ---
+
+    /** How far the player has traveled along the active region's path. */
+    public double getDistanceTraveled() { return distanceTraveled; }
+    /** Total length of the active region's snake path. */
+    public double getTotalPathLength() { return totalPathLength; }
+    /** Sum of totalLength for all regions already completed. */
+    public double getCompletedRegionsLength() { return completedRegionsLength; }
+    /** Sum of totalLength for ALL regions. */
+    public double getTotalAllRegionsLength() { return totalAllRegionsLength; }
+    /** Whether the executor is currently in the approaching phase. */
+    public boolean isApproaching() { return state == State.APPROACHING; }
+
+    /** Recomputes {@link #completedRegionsLength} from the current region index. */
+    private void recomputeCompletedRegionsLength() {
+        completedRegionsLength = 0.0;
+        for (int i = 0; i < currentRegionIndex && i < regions.size(); i++) {
+            completedRegionsLength += regions.get(i).totalLength();
+        }
+    }
 
     /** Returns the concatenated path across all regions (for renderer preview). */
     public List<Vec3> getFullConcatPath() {
@@ -671,6 +698,7 @@ public class SweepExecutor {
      */
     private void buildAllRegionPaths(List<LitematicaIntegration.SubRegionBox> subRegions) {
         regions.clear();
+        totalAllRegionsLength = 0.0;
         for (LitematicaIntegration.SubRegionBox box : subRegions) {
             int minX = Math.min(box.pos1().getX(), box.pos2().getX());
             int maxX = Math.max(box.pos1().getX(), box.pos2().getX());
@@ -692,6 +720,7 @@ public class SweepExecutor {
             }
             double totalLen = cum;
             regions.add(new RegionData(box.name(), stations, segs, cumDist, totalLen, stations.size()));
+            totalAllRegionsLength += totalLen;
         }
     }
 
@@ -721,6 +750,7 @@ public class SweepExecutor {
             // Save the last position of the current region for a smooth transition
             Vec3 lastPos = stationPath.isEmpty() ? null : stationPath.get(stationPath.size() - 1);
 
+            completedRegionsLength += regions.get(currentRegionIndex).totalLength();
             globalStationOffset += regions.get(currentRegionIndex).stationCount();
             currentRegionIndex++;
             if (!loadRegion(currentRegionIndex)) {
@@ -777,6 +807,8 @@ public class SweepExecutor {
         regions.clear();
         currentRegionIndex = 0;
         globalStationOffset = 0;
+        completedRegionsLength = 0.0;
+        totalAllRegionsLength = 0.0;
     }
 
     private void resetApproach() {

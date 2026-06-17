@@ -163,6 +163,7 @@
   "client-tools.csweep.litematica.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]",
   "client-tools.csweep.litematica.current_region": "§a当前区域: §e%s §7(%d/%d)",
   "client-tools.csweep.status_regions": "§a区域数: §e%d",
+  "client-tools.csweep.status_progress": "§a进度: [%s] §b%s%%  §a预计: §e%s",
 
   "client-tools.csequence.created": "§a序列 \"§e%s§a\" 已创建。",
   "client-tools.csequence.create_failed": "§c创建序列失败: §e%s",

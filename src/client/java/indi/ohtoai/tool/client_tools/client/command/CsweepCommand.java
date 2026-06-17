@@ -699,12 +699,14 @@ public class CsweepCommand {
         if (executor.isPaused()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_paused",
                 executor.getCurrentStationIndex() + 1, executor.getTotalStations()));
+            sendProgressBar(source, executor);
         } else if (SweepState.isPaused()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_paused_saved",
                 SweepState.getSavedStationIndex() + 1));
         } else if (executor.isRunning()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_running",
                 executor.getCurrentStationIndex() + 1, executor.getTotalStations()));
+            sendProgressBar(source, executor);
         } else if (executor.isDone()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_done", executor.getTotalStations()));
         } else if (executor.isError()) {
@@ -714,6 +716,49 @@ public class CsweepCommand {
         }
 
         return 1;
+    }
+
+    private static void sendProgressBar(FabricClientCommandSource source, SweepExecutor executor) {
+        double totalDist = executor.getTotalAllRegionsLength();
+        if (totalDist <= 0) return;
+
+        double completedDist = executor.getCompletedRegionsLength()
+            + (executor.isApproaching() ? 0 : executor.getDistanceTraveled());
+        double fraction = Math.max(0.0, Math.min(1.0, completedDist / totalDist));
+        double pct = fraction * 100.0;
+
+        int barWidth = 20;
+        int filled = (int) Math.round(fraction * barWidth);
+        if (filled > barWidth) filled = barWidth;
+        int empty = barWidth - filled;
+
+        StringBuilder bar = new StringBuilder();
+        bar.append("§a");
+        for (int i = 0; i < filled; i++) bar.append('█');
+        bar.append("§7");
+        for (int i = 0; i < empty; i++) bar.append('░');
+        bar.append("§r");
+
+        double speed = SweepState.getSpeed();
+        double remainingDist = totalDist - completedDist;
+        long etaSeconds = speed > 0 ? (long) Math.ceil(remainingDist / speed) : 0;
+
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_progress",
+            bar.toString(), String.format("%.1f", pct), formatEta(etaSeconds)));
+    }
+
+    private static String formatEta(long totalSeconds) {
+        if (totalSeconds >= 3600) {
+            long h = totalSeconds / 3600;
+            long m = (totalSeconds % 3600) / 60;
+            return h + "h " + m + "m";
+        } else if (totalSeconds >= 60) {
+            long m = totalSeconds / 60;
+            long s = totalSeconds % 60;
+            return m + "m " + s + "s";
+        } else {
+            return totalSeconds + "s";
+        }
     }
 
     // ==================== reset ====================
