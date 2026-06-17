@@ -11,6 +11,8 @@ Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/relea
 
 <img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/decb09da-84e7-4769-98fd-bcdb259610b7" />
 
+<img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/74f70c4d-55c5-4713-8bdf-fa5ed3db4862" />
+
 ---
 
 ## Introduction
