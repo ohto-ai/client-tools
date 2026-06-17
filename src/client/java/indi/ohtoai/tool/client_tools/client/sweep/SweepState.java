@@ -28,11 +28,14 @@ public class SweepState {
     private static double speed = 10.0;
     private static boolean showOutline = false;
     private static boolean showPath = false;
+    private static boolean showNearestDirection = true;
+    private static boolean highlightCurrentLayer = true;
     private static boolean running = false;
     private static int savedStationIndex = -1; // -1 = no paused state to resume
     private static boolean paused = false;
     private static boolean unfinished = false;
     private static boolean syncLitematica = true;
+    private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
 
@@ -46,6 +49,8 @@ public class SweepState {
         double speed = 10.0;
         boolean showOutline = false;
         boolean showPath = false;
+        Boolean showNearestDirection; // boxed so missing (old config) defaults to true
+        Boolean highlightCurrentLayer; // boxed so missing (old config) defaults to true
         int savedStationIndex = -1;
         boolean paused = false;
         boolean unfinished = false;
@@ -95,6 +100,8 @@ public class SweepState {
             speed = 10.0;
             showOutline = false;
             showPath = false;
+            showNearestDirection = true;
+            highlightCurrentLayer = true;
             running = false;
             savedStationIndex = -1;
             paused = false;
@@ -114,11 +121,14 @@ public class SweepState {
     public static double getSpeed() { ensureLoaded(); return speed; }
     public static boolean isShowOutline() { ensureLoaded(); return showOutline; }
     public static boolean isShowPath() { ensureLoaded(); return showPath; }
+    public static boolean isShowNearestDirection() { ensureLoaded(); return showNearestDirection; }
+    public static boolean isHighlightCurrentLayer() { ensureLoaded(); return highlightCurrentLayer; }
     public static boolean isRunning() { ensureLoaded(); return running; }
     public static int getSavedStationIndex() { ensureLoaded(); return savedStationIndex; }
     public static boolean isPaused() { ensureLoaded(); return paused; }
     public static boolean isUnfinished() { ensureLoaded(); return unfinished; }
     public static boolean isSyncLitematica() { ensureLoaded(); return syncLitematica; }
+    public static int getAreaVersion() { ensureLoaded(); return areaVersion; }
 
     /**
      * Enables or disables Litematica area selection synchronization.
@@ -129,6 +139,7 @@ public class SweepState {
         ensureLoaded();
         if (syncLitematica != v) {
             syncLitematica = v;
+            areaVersion++;
             invalidateCache();
             save();
         }
@@ -179,6 +190,7 @@ public class SweepState {
             invalidateCache();
         }
         pos1 = pos;
+        areaVersion++;
         save();
     }
 
@@ -190,12 +202,15 @@ public class SweepState {
             invalidateCache();
         }
         pos2 = pos;
+        areaVersion++;
         save();
     }
-    public static void setRadius(int r) { ensureLoaded(); radius = Math.max(1, Math.min(64, r)); save(); }
+    public static void setRadius(int r) { ensureLoaded(); radius = Math.max(1, Math.min(64, r)); areaVersion++; save(); }
     public static void setSpeed(double s) { ensureLoaded(); speed = Math.max(0.5, Math.min(100.0, s)); save(); }
     public static void setShowOutline(boolean v) { ensureLoaded(); showOutline = v; save(); }
     public static void setShowPath(boolean v) { ensureLoaded(); showPath = v; save(); }
+    public static void setShowNearestDirection(boolean v) { ensureLoaded(); showNearestDirection = v; save(); }
+    public static void setHighlightCurrentLayer(boolean v) { ensureLoaded(); highlightCurrentLayer = v; save(); }
 
     // --- Pause state (persisted) ---
 
@@ -291,11 +306,14 @@ public class SweepState {
         speed = 10.0;
         showOutline = false;
         showPath = false;
+        showNearestDirection = true;
+        highlightCurrentLayer = true;
         running = false;
         savedStationIndex = -1;
         paused = false;
         unfinished = false;
         syncLitematica = true;
+        areaVersion++;
         invalidateCache();
         save();
     }
@@ -311,6 +329,8 @@ public class SweepState {
         data.speed = speed;
         data.showOutline = showOutline;
         data.showPath = showPath;
+        data.showNearestDirection = showNearestDirection;
+        data.highlightCurrentLayer = highlightCurrentLayer;
         data.savedStationIndex = savedStationIndex;
         data.paused = paused;
         data.unfinished = unfinished;
@@ -335,6 +355,8 @@ public class SweepState {
             speed = data.speed;
             showOutline = data.showOutline;
             showPath = data.showPath;
+            showNearestDirection = data.showNearestDirection != null ? data.showNearestDirection : true;
+            highlightCurrentLayer = data.highlightCurrentLayer != null ? data.highlightCurrentLayer : true;
             savedStationIndex = data.savedStationIndex;
             paused = data.paused;
             unfinished = data.unfinished;

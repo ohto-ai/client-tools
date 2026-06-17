@@ -30,6 +30,8 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
  *   show              — show current display settings
  *   show outline      — toggle cuboid outline
  *   show path         — toggle path lines
+ *   show layer        — toggle layer emphasis (dim non-current, thick current)
+ *   show dir          — toggle nearest station direction line
  *   start             — begin sweep
  *   stop              — halt sweep
  *   status            — show config + progress
@@ -109,7 +111,11 @@ public class CsweepCommand {
                     .then(literal("outline")
                         .executes(ctx -> toggleOutline(ctx.getSource())))
                     .then(literal("path")
-                        .executes(ctx -> togglePath(ctx.getSource()))))
+                        .executes(ctx -> togglePath(ctx.getSource())))
+                    .then(literal("layer")
+                        .executes(ctx -> toggleLayer(ctx.getSource())))
+                    .then(literal("dir")
+                        .executes(ctx -> toggleNearestDirection(ctx.getSource()))))
                 // ---- litematica ----
                 .then(literal("litematica")
                     .then(literal("on")
@@ -119,9 +125,9 @@ public class CsweepCommand {
                     .then(literal("sync")
                         .executes(ctx -> forceSyncLitematica(ctx.getSource())))
                     .executes(ctx -> showLitematicaStatus(ctx.getSource())))
-                // ---- nearest (find nearest station to player) ----
+                // ---- nearest (toggle real-time nearest station tracking) ----
                 .then(literal("nearest")
-                    .executes(ctx -> findNearestStation(ctx.getSource())))
+                    .executes(ctx -> toggleNearestTracking(ctx.getSource())))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -411,7 +417,7 @@ public class CsweepCommand {
         }
     }
 
-    private static int findNearestStation(FabricClientCommandSource source) {
+    private static int toggleNearestTracking(FabricClientCommandSource source) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) {
             source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
@@ -419,10 +425,26 @@ public class CsweepCommand {
         }
 
         SweepExecutor exe = SweepExecutor.getInstance();
+
+        if (exe.isNearestTrackingEnabled()) {
+            // Turn OFF tracking
+            exe.setNearestTrackingEnabled(false);
+            exe.clearNearestStation();
+            source.sendFeedback(Component.translatable("client-tools.csweep.nearest_off"));
+            return 1;
+        }
+
+        // Turn ON tracking — stop any running sweep first
         if (exe.isRunning()) {
             exe.stop();
+            source.sendFeedback(Component.translatable("client-tools.csweep.stopped"));
         }
-        SweepState.clearPauseState();
+
+        // If there's a paused state, clear it (user is choosing a new start point)
+        if (SweepState.isPaused()) {
+            SweepState.clearPauseState();
+            source.sendFeedback(Component.translatable("client-tools.csweep.nearest_cleared_pause"));
+        }
 
         String info = exe.findNearestStation();
         if (info == null) {
@@ -430,7 +452,8 @@ public class CsweepCommand {
             return 0;
         }
 
-        source.sendFeedback(Component.translatable("client-tools.csweep.nearest_found", info));
+        exe.setNearestTrackingEnabled(true);
+        source.sendFeedback(Component.translatable("client-tools.csweep.nearest_on", info));
         source.sendFeedback(Component.translatable("client-tools.csweep.nearest_hint"));
         return 1;
     }
@@ -477,10 +500,28 @@ public class CsweepCommand {
         return 1;
     }
 
+    private static int toggleLayer(FabricClientCommandSource source) {
+        boolean enabled = !SweepState.isHighlightCurrentLayer();
+        SweepState.setHighlightCurrentLayer(enabled);
+        source.sendFeedback(Component.translatable(
+            enabled ? "client-tools.csweep.show_layer_on" : "client-tools.csweep.show_layer_off"));
+        return 1;
+    }
+
+    private static int toggleNearestDirection(FabricClientCommandSource source) {
+        boolean enabled = !SweepState.isShowNearestDirection();
+        SweepState.setShowNearestDirection(enabled);
+        source.sendFeedback(Component.translatable(
+            enabled ? "client-tools.csweep.show_dir_on" : "client-tools.csweep.show_dir_off"));
+        return 1;
+    }
+
     private static int showDisplayStatus(FabricClientCommandSource source) {
         source.sendFeedback(Component.translatable("client-tools.csweep.show_status",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",
-            SweepState.isShowPath() ? "§aON" : "§7OFF"));
+            SweepState.isShowPath() ? "§aON" : "§7OFF",
+            SweepState.isHighlightCurrentLayer() ? "§aON" : "§7OFF",
+            SweepState.isShowNearestDirection() ? "§aON" : "§7OFF"));
         return 1;
     }
 
@@ -496,8 +537,12 @@ public class CsweepCommand {
 
         SweepExecutor executor = SweepExecutor.getInstance();
 
-        // If a nearest station has been selected, always start from there
+        // If a nearest station is active (tracking or one-shot), start from there
         if (executor.hasNearestStation()) {
+            // If tracking was on, turn it off — nearest station is consumed in start()
+            if (executor.isNearestTrackingEnabled()) {
+                executor.setNearestTrackingEnabled(false);
+            }
             if (executor.isRunning()) executor.stop();
             // Fall through to start below (nearest station is consumed in start())
         } else if (SweepState.isPaused()) {
@@ -638,7 +683,9 @@ public class CsweepCommand {
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_show",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",
-            SweepState.isShowPath() ? "§aON" : "§7OFF"));
+            SweepState.isShowPath() ? "§aON" : "§7OFF",
+            SweepState.isHighlightCurrentLayer() ? "§aON" : "§7OFF",
+            SweepState.isShowNearestDirection() ? "§aON" : "§7OFF"));
 
         if (SweepState.hasPositions()) {
             long volume = SweepState.getVolume();

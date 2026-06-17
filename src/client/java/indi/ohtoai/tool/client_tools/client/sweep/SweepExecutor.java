@@ -87,6 +87,16 @@ public class SweepExecutor {
     // Nearest-station highlight (set by /csweep nearest, consumed by /csweep start)
     private int nearestGlobalStationIndex = -1;
     private Vec3 nearestStationPos = null;
+    private Vec3 nearestStationPrevPos = null;
+    private Vec3 nearestStationNextPos = null;
+
+    // Real-time nearest station tracking
+    private boolean nearestTrackingEnabled = false;
+    private int nearestTrackTickCounter = 0;
+    private static final int NEAREST_TRACK_INTERVAL = 10;
+    private int cachedAreaVersion = -1;
+    private int cachedRadius = -1;
+    private List<LitematicaIntegration.SubRegionBox> cachedSubRegions = null;
 
     // Approach state (smooth fly-in from current position to path start)
     private Vec3 approachOrigin = null;
@@ -344,7 +354,11 @@ public class SweepExecutor {
 
     public int getNearestStationIndex() { return nearestGlobalStationIndex; }
     public Vec3 getNearestStationPos() { return nearestStationPos; }
+    public Vec3 getNearestStationPrevPos() { return nearestStationPrevPos; }
+    public Vec3 getNearestStationNextPos() { return nearestStationNextPos; }
     public boolean hasNearestStation() { return nearestGlobalStationIndex >= 0 && nearestStationPos != null; }
+    public boolean isNearestTrackingEnabled() { return nearestTrackingEnabled; }
+    public void setNearestTrackingEnabled(boolean v) { nearestTrackingEnabled = v; }
 
     /**
      * Finds the station nearest to the player in the full sweep path,
@@ -392,6 +406,12 @@ public class SweepExecutor {
 
         nearestGlobalStationIndex = bestGlobalIdx;
         nearestStationPos = bestPos;
+        computeNearestNeighbors(bestGlobalIdx);
+
+        // Cache the built paths for real-time tracking reuse
+        cachedAreaVersion = SweepState.getAreaVersion();
+        cachedRadius = radius;
+        cachedSubRegions = new ArrayList<>(subRegions);
 
         double distance = Math.sqrt(bestDist);
         String regionInfo = regions.size() > 1 ? " [" + bestRegionName + "]" : "";
@@ -402,6 +422,116 @@ public class SweepExecutor {
     public void clearNearestStation() {
         nearestGlobalStationIndex = -1;
         nearestStationPos = null;
+        nearestStationPrevPos = null;
+        nearestStationNextPos = null;
+    }
+
+    /**
+     * Computes the previous and next station positions in the full concatenated
+     * path for the given global station index, for path-direction display.
+     */
+    private void computeNearestNeighbors(int globalIdx) {
+        nearestStationPrevPos = null;
+        nearestStationNextPos = null;
+
+        if (regions.isEmpty()) return;
+
+        int offset = 0;
+        for (int ri = 0; ri < regions.size(); ri++) {
+            RegionData reg = regions.get(ri);
+            int localIdx = globalIdx - offset;
+            if (localIdx >= 0 && localIdx < reg.stationCount()) {
+                List<Vec3> stations = reg.stations();
+                if (localIdx > 0) {
+                    nearestStationPrevPos = stations.get(localIdx - 1);
+                } else if (ri > 0) {
+                    List<Vec3> prevStations = regions.get(ri - 1).stations();
+                    nearestStationPrevPos = prevStations.get(prevStations.size() - 1);
+                }
+                if (localIdx < stations.size() - 1) {
+                    nearestStationNextPos = stations.get(localIdx + 1);
+                } else if (ri < regions.size() - 1) {
+                    List<Vec3> nextStations = regions.get(ri + 1).stations();
+                    nearestStationNextPos = nextStations.get(0);
+                }
+                return;
+            }
+            offset += reg.stationCount();
+        }
+    }
+
+    // --- Real-time nearest station tracking ---
+
+    /**
+     * Called every {@link #NEAREST_TRACK_INTERVAL} ticks when idle and
+     * tracking is enabled. Rebuilds the path cache if the sweep configuration
+     * has changed, then finds the nearest station from the cache.
+     */
+    private void updateNearestTracking(Minecraft client) {
+        if (client.player == null) {
+            clearNearestStation();
+            return;
+        }
+        Vec3 playerPos = client.player.position();
+
+        SweepState.refreshSubRegions();
+        List<LitematicaIntegration.SubRegionBox> subRegions = SweepState.resolveSubRegions();
+        if (subRegions.isEmpty()) {
+            clearNearestStation();
+            return;
+        }
+
+        int currentVersion = SweepState.getAreaVersion();
+        int currentRadius = SweepState.getRadius();
+        boolean configChanged = (cachedAreaVersion != currentVersion)
+            || (cachedRadius != currentRadius)
+            || (cachedSubRegions == null)
+            || (!subRegions.equals(cachedSubRegions));
+
+        if (configChanged) {
+            radius = currentRadius;
+            regions.clear();
+            buildAllRegionPaths(subRegions);
+            totalStations = 0;
+            for (RegionData reg : regions) totalStations += reg.stationCount();
+            cachedAreaVersion = currentVersion;
+            cachedRadius = currentRadius;
+            cachedSubRegions = new ArrayList<>(subRegions);
+        }
+
+        findNearestFromCache(playerPos);
+    }
+
+    /**
+     * Finds the station nearest to the given position by iterating over
+     * the cached {@link #regions} list. Does NOT rebuild any paths.
+     */
+    private void findNearestFromCache(Vec3 playerPos) {
+        double bestDistSq = Double.MAX_VALUE;
+        int bestGlobalIdx = -1;
+        Vec3 bestPos = null;
+
+        int globalIdx = 0;
+        for (RegionData reg : regions) {
+            for (Vec3 station : reg.stations()) {
+                double distSq = playerPos.distanceToSqr(station);
+                if (distSq < bestDistSq) {
+                    bestDistSq = distSq;
+                    bestGlobalIdx = globalIdx;
+                    bestPos = station;
+                }
+                globalIdx++;
+            }
+        }
+
+        if (bestGlobalIdx < 0) {
+            clearNearestStation();
+            return;
+        }
+
+        nearestGlobalStationIndex = bestGlobalIdx;
+        nearestStationPos = bestPos;
+        computeNearestNeighbors(bestGlobalIdx);
     }
 
     // --- Path preview ---
@@ -427,6 +557,16 @@ public class SweepExecutor {
     // --- Tick ---
 
     public void tick(Minecraft client) {
+        // Real-time nearest station tracking (when idle and tracking enabled)
+        if (state == State.IDLE && nearestTrackingEnabled) {
+            nearestTrackTickCounter++;
+            if (nearestTrackTickCounter >= NEAREST_TRACK_INTERVAL) {
+                nearestTrackTickCounter = 0;
+                updateNearestTracking(client);
+            }
+            return;
+        }
+
         if (state != State.MOVING && state != State.APPROACHING) return;
         if (client.player == null || client.level == null || client.player.connection == null) return;
 

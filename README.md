@@ -82,7 +82,9 @@ All features run entirely on the client side. No server-side installation is req
 - **Pause & resume with full persistence** — progress survives game restarts, pause acts as toggle
 - **Auto-save on disconnect** — sweep progress is automatically saved when you disconnect, with a reconnect reminder
 - **Smooth approach** — when resuming far from the path, flies smoothly to the target instead of teleporting
-- **Mid-sweep resume** — find the nearest unvisited station to your current position with `/csweep nearest`
+- **Real-time nearest station tracking** — `/csweep nearest` toggles live tracking; nearest station updates as you move, with path direction arrows showing which way the sweep will go
+- **Y-level layer emphasis** — `/csweep show layer` highlights the current Y-level path with multi-offset thick lines, dims other Y-levels (follows sweep Y when running, player Y when idle)
+- **Multi-region layer emphasis** — thickens the current sub-region outline, dims inactive regions for clarity
 - **Sub-region skip** — skip to the next Litematica sub-region with `/csweep next`
 - Live speed adjustment — change flight speed mid-operation
 - Designed to work alongside projection printers and auto-mining mods
@@ -192,6 +194,8 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep show              — Check current show settings
 /csweep show outline      — Toggle green cuboid wireframe
 /csweep show path         — Toggle cyan snake-path preview (works before starting!)
+/csweep show layer        — Toggle Y-level emphasis (thick current layer, dim others)
+/csweep show dir          — Toggle path direction arrows at nearest station
 
 --- Litematica Integration ---
 /csweep litematica on     — Sync sweep area with Litematica schematic sub-regions
@@ -200,7 +204,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep litematica        — Show Litematica sync status and sub-region list
 
 --- Navigation ---
-/csweep nearest           — Find nearest sweep station to player (for mid-sweep resume)
+/csweep nearest           — Toggle real-time nearest station tracking (updates as you move)
 /csweep next              — Skip current sub-region and jump to the next one
 
 --- Control ---
@@ -221,7 +225,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Litematica integration:** Enable with `/csweep litematica on` to automatically sync the sweep area with your active Litematica schematic's sub-regions. Each sub-region is swept sequentially. Use `/csweep litematica` to view detected regions and their coordinates. Requires Litematica to be installed. Setting manual positions auto-disables the sync.
 
-**Mid-sweep recovery:** If disconnected or teleported away mid-sweep, use `/csweep nearest` to find the closest unvisited station to your current position, then `/csweep start` to resume from there. The executor flies you smoothly to the target station — no instant teleport.
+**Mid-sweep recovery & real-time tracking:** `/csweep nearest` now toggles real-time nearest station tracking. When enabled, the nearest station updates as you move, with path direction arrows showing the sweep direction at that station. Move around to find the best starting point, then `/csweep start` to begin from there. The executor flies you smoothly to the target station — no instant teleport. `/csweep nearest` again to turn off tracking. If a paused state exists, using `/csweep nearest` clears it (you're choosing a new start point).
 
 ### `/cchat` Quick Start
 
