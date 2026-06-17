@@ -9,7 +9,9 @@ import indi.ohtoai.tool.client_tools.client.sequence.SequenceExecutor;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.network.chat.Component;
 
-import java.awt.*;
+import net.minecraft.network.chat.ClickEvent;
+import net.minecraft.network.chat.HoverEvent;
+
 import java.nio.file.Path;
 import java.util.List;
 
@@ -17,19 +19,20 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.arg
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 /**
- * Registers the {@code /csequence} command for editing and executing
- * .mcfunction sequence files via an external text editor.
+ * Registers the {@code /csequence} command for creating, editing, and executing
+ * .mcfunction sequence files. File paths are shown as clickable chat messages
+ * (click-to-copy) so users can navigate to them manually in their file manager.
  *
  * <pre>
  * /csequence
- *   new &lt;name&gt;              — create empty .mcfunction and open in editor
- *   edit &lt;name&gt;             — open existing .mcfunction in editor
+ *   new &lt;name&gt;              — create empty .mcfunction and show its path
+ *   edit &lt;name&gt;             — show existing .mcfunction path
  *   run &lt;name&gt; [delay] [loop] — execute sequence
  *   stop                     — stop running sequence
  *   list                     — list all saved sequences
  *   delete &lt;name&gt;           — delete a sequence file
  *   status                   — show current execution progress
- *   folder                   — open sequences folder in file explorer
+ *   folder                   — show sequences folder path
  * </pre>
  */
 public class CsequenceCommand {
@@ -135,7 +138,7 @@ public class CsequenceCommand {
         }
 
         source.sendFeedback(Component.translatable("client-tools.csequence.created", name));
-        openInEditor(source, file);
+        showFilePath(source, file, "client-tools.csequence.file_location");
         return 1;
     }
 
@@ -152,10 +155,11 @@ public class CsequenceCommand {
                 return 0;
             }
             source.sendFeedback(Component.translatable("client-tools.csequence.created", name));
+            file = created;
         }
 
         source.sendFeedback(Component.translatable("client-tools.csequence.editing", name));
-        openInEditor(source, file);
+        showFilePath(source, file, "client-tools.csequence.file_location");
         return 1;
     }
 
@@ -311,79 +315,31 @@ public class CsequenceCommand {
 
     private static int openFolder(FabricClientCommandSource source) {
         Path dir = CsequenceState.getSequencesDir();
-        if (openPath(dir, source)) {
-            source.sendFeedback(Component.translatable("client-tools.csequence.folder_opened"));
-            return 1;
-        } else {
-            source.sendFeedback(Component.translatable("client-tools.csequence.folder_error", ""));
-            return 0;
-        }
+        String pathStr = dir.toAbsolutePath().toString();
+        Component pathComponent = Component.literal(pathStr)
+            .withStyle(style -> style
+                .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, pathStr))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    Component.translatable("client-tools.csequence.click_to_copy"))));
+        source.sendFeedback(Component.translatable("client-tools.csequence.folder_location", pathStr));
+        source.sendFeedback(pathComponent);
+        return 1;
     }
 
     // ==================== internal ====================
 
     /**
-     * Open the given file in the system's default text editor.
-     * Uses Desktop API first, then falls back to OS-specific commands.
+     * Send the given file's path as a clickable chat message so the user can copy
+     * it and open the file manually. This avoids launching external OS programs,
+     * which is required for CurseForge compliance.
      */
-    private static void openInEditor(FabricClientCommandSource source, Path file) {
-        if (!openPath(file, source)) {
-            source.sendFeedback(Component.translatable("client-tools.csequence.editor_error", ""));
-        }
-    }
-
-    /**
-     * Open a file or folder using Desktop API or OS-specific fallback.
-     *
-     * @param path   the file or directory to open
-     * @param source for sending error feedback (may be null)
-     * @return true if the path was opened successfully
-     */
-    private static boolean openPath(Path path, FabricClientCommandSource source) {
-        // 1) Try AWT Desktop API
-        try {
-            if (Desktop.isDesktopSupported()) {
-                Desktop desktop = Desktop.getDesktop();
-                if (java.nio.file.Files.isDirectory(path)) {
-                    desktop.open(path.toFile());
-                } else {
-                    desktop.edit(path.toFile());
-                }
-                return true;
-            }
-        } catch (Exception ignored) {
-            // Fall through to ProcessBuilder fallback
-        }
-
-        // 2) Fallback: OS-specific ProcessBuilder commands
-        try {
-            String os = System.getProperty("os.name").toLowerCase();
-            String absPath = path.toAbsolutePath().toString();
-            ProcessBuilder pb;
-
-            if (os.contains("win")) {
-                if (java.nio.file.Files.isDirectory(path)) {
-                    pb = new ProcessBuilder("explorer", absPath);
-                } else {
-                    // "cmd /c start" opens the file with its default associated program
-                    pb = new ProcessBuilder("cmd", "/c", "start", "", absPath);
-                }
-            } else if (os.contains("mac")) {
-                if (java.nio.file.Files.isDirectory(path)) {
-                    pb = new ProcessBuilder("open", absPath);
-                } else {
-                    // "open -t" forces opening in TextEdit if no default is set
-                    pb = new ProcessBuilder("open", "-t", absPath);
-                }
-            } else {
-                // Linux / other Unix: xdg-open handles both files and directories
-                pb = new ProcessBuilder("xdg-open", absPath);
-            }
-
-            pb.start();
-            return true;
-        } catch (Exception e) {
-            return false;
-        }
+    private static void showFilePath(FabricClientCommandSource source, Path file, String translationKey) {
+        String pathStr = file.toAbsolutePath().toString();
+        source.sendFeedback(Component.translatable(translationKey, pathStr));
+        source.sendFeedback(Component.literal(pathStr)
+            .withStyle(style -> style
+                .withClickEvent(new ClickEvent(ClickEvent.Action.COPY_TO_CLIPBOARD, pathStr))
+                .withHoverEvent(new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                    Component.translatable("client-tools.csequence.click_to_copy")))));
     }
 }

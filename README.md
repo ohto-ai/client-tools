@@ -73,12 +73,15 @@ All features run entirely on the client side. No server-side installation is req
 ### `/csweep` — Snake-Pattern Area Traversal
 
 - Select a cuboid area with two corner positions (`pos1` / `pos2`)
+- **Litematica integration** — auto-sync sweep area from Litematica schematic sub-regions; sweep across multiple regions sequentially
 - Snake-pattern path generation with configurable station spacing (based on radius)
 - **Continuous smooth movement** — linear interpolation between stations at constant speed, no stop-and-go
 - **Dynamic cuboid adjustment** — expand or contract the cuboid boundary based on your viewing direction
 - **Does not lock camera** — uses position-only packets, you keep full view control
 - Independent highlight toggles: green outline wireframe, cyan path preview (gray for visited segments)
 - **Pause & resume with full persistence** — progress survives game restarts, pause acts as toggle
+- **Mid-sweep resume** — find the nearest unvisited station to your current position with `/csweep nearest`
+- **Sub-region skip** — skip to the next Litematica sub-region with `/csweep next`
 - Live speed adjustment — change flight speed mid-operation
 - Designed to work alongside projection printers and auto-mining mods
 
@@ -89,7 +92,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ### `/csequence` — mcfunction Sequence Executor
 
-- Edit `.mcfunction` files with your system's default text editor from within Minecraft
+- Create and manage `.mcfunction` files with click-to-copy file paths for external editing
 - Execute commands sequentially with configurable delay between each line
 - Supports **nested sequences** — a sequence can call another, which can call another (up to 10 levels deep)
 - **Cycle detection** — prevents infinite recursion (A→B→A is blocked automatically)
@@ -150,12 +153,16 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ### `/ctimer` Quick Start
 
 ```
-/ctimer 5s /say Hello         — Send "/say Hello" every 5 seconds (infinite)
-/ctimer 30s /tp ~ ~10 ~ 10   — Teleport every 30 seconds, 10 times
-/ctimer list                  — List all active timers
-/ctimer stop                  — Stop all timers
-/ctimer stop Hello            — Stop timers whose command matches "Hello"
+/ctimer start infinite interval 5s /say Hello   — Send "/say Hello" every 5 seconds forever
+/ctimer start 10 interval 30s /tp ~ ~10 ~       — Teleport every 30 seconds, 10 times
+/ctimer start 5 interval 1m /weather clear       — Run "/weather clear" every minute, 5 times
+/ctimer list                                     — List all active timers
+/ctimer stop-all                                 — Stop all timers
+/ctimer stop Hello                               — Stop timers whose command matches "Hello"
 ```
+
+**Syntax:** `/ctimer start <count|infinite> interval <duration> <command>`
+**Duration formats:** `1s`, `5m`, `1h`, `500ms`, `20t` (ticks)
 
 ### `/cfly` Quick Start
 
@@ -184,6 +191,16 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep show outline      — Toggle green cuboid wireframe
 /csweep show path         — Toggle cyan snake-path preview (works before starting!)
 
+--- Litematica Integration ---
+/csweep litematica on     — Sync sweep area with Litematica schematic sub-regions
+/csweep litematica off    — Use manual positions instead
+/csweep litematica sync   — Force re-sync with Litematica placement (refreshes regions)
+/csweep litematica        — Show Litematica sync status and sub-region list
+
+--- Navigation ---
+/csweep nearest           — Find nearest sweep station to player (for mid-sweep resume)
+/csweep next              — Skip current sub-region and jump to the next one
+
 --- Control ---
 /csweep start             — Start sweep (or resume if paused state exists)
 /csweep pause             — Pause at current station / resume if paused (toggle)
@@ -200,6 +217,10 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Smooth movement:** The sweep no longer stops at each station. The player moves continuously along the path at constant speed with linear interpolation between waypoints — faster and more natural.
 
+**Litematica integration:** Enable with `/csweep litematica on` to automatically sync the sweep area with your active Litematica schematic's sub-regions. Each sub-region is swept sequentially. Use `/csweep litematica` to view detected regions and their coordinates. Requires Litematica to be installed. Setting manual positions auto-disables the sync.
+
+**Mid-sweep recovery:** If disconnected or teleported away mid-sweep, use `/csweep nearest` to find the closest unvisited station to your current position, then `/csweep start` to resume from there.
+
 ### `/cchat` Quick Start
 
 ```
@@ -210,9 +231,9 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 ```
 --- Editing ---
-/csequence new daily           — Create an empty daily.mcfunction and open in external editor
-/csequence edit daily          — Open daily.mcfunction in external editor
-/csequence folder              — Open the sequences folder in file explorer
+/csequence new daily           — Create an empty daily.mcfunction and show its file path
+/csequence edit daily          — Show daily.mcfunction file path (click to copy)
+/csequence folder              — Show sequences folder path (click to copy)
 /csequence list                — List all saved sequences
 /csequence delete daily        — Delete daily.mcfunction
 
@@ -231,7 +252,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Nested sequences:** Use `/csequence run <name>` inside a sequence file to call another sequence. The parent pauses, the child runs to completion, then the parent resumes. Cycle detection prevents infinite recursion.
 
-**External editor:** Uses your system's default text editor (Notepad, VSCode, etc.). On Windows, also falls back to `cmd /c start` if the Java Desktop API is unavailable.
+**File paths:** File paths are shown as clickable text in chat — click to copy the path, then paste into your file manager or editor to open the file directly. This approach ensures CurseForge compliance by not launching external programs.
 
 ---
 

@@ -9,6 +9,7 @@ import net.minecraft.core.BlockPos;
 import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 /**
  * Stores the current /csweep configuration.
@@ -30,6 +31,7 @@ public class SweepState {
     private static boolean running = false;
     private static int savedStationIndex = -1; // -1 = no paused state to resume
     private static boolean paused = false;
+    private static boolean syncLitematica = true;
     private static boolean loaded = false;
     private static String currentWorldId = "";
 
@@ -45,6 +47,7 @@ public class SweepState {
         boolean showPath = false;
         int savedStationIndex = -1;
         boolean paused = false;
+        Boolean syncLitematica; // boxed so missing (old config) defaults to true
     }
 
     @SuppressWarnings("unused")
@@ -93,6 +96,8 @@ public class SweepState {
             running = false;
             savedStationIndex = -1;
             paused = false;
+            syncLitematica = true;
+            invalidateCache();
             load();
             loaded = true;
         }
@@ -109,11 +114,80 @@ public class SweepState {
     public static boolean isRunning() { ensureLoaded(); return running; }
     public static int getSavedStationIndex() { ensureLoaded(); return savedStationIndex; }
     public static boolean isPaused() { ensureLoaded(); return paused; }
+    public static boolean isSyncLitematica() { ensureLoaded(); return syncLitematica; }
+
+    /**
+     * Enables or disables Litematica area selection synchronization.
+     * When enabled and Litematica is available, the sweep area is read from
+     * Litematica's current selection instead of manual pos1/pos2.
+     */
+    public static void setSyncLitematica(boolean v) {
+        ensureLoaded();
+        if (syncLitematica != v) {
+            syncLitematica = v;
+            invalidateCache();
+            save();
+        }
+    }
+
+    // --- Sub-region resolution ---
+
+    /** No-op — kept for API compatibility. Resolution always fetches fresh data. */
+    private static void invalidateCache() {}
+
+    /**
+     * No-op — kept for API compatibility. Resolution always fetches fresh data.
+     * @deprecated No longer needed; Litematica changes are picked up automatically.
+     */
+    @SuppressWarnings("unused")
+    public static void refreshSubRegions() { ensureLoaded(); }
+
+    /**
+     * Returns the effective sub-region list, always fresh from Litematica
+     * (if sync is on) or manual pos1/pos2.
+     *
+     * @return list of sub-region boxes, empty if no area is defined
+     */
+    public static List<LitematicaIntegration.SubRegionBox> resolveSubRegions() {
+        ensureLoaded();
+
+        if (syncLitematica && LitematicaIntegration.isAvailable()) {
+            var result = LitematicaIntegration.getSubRegions();
+            if (!result.isEmpty()) return result;
+        }
+
+        if (pos1 != null && pos2 != null) {
+            String name = pos1.getX() + "," + pos1.getY() + "," + pos1.getZ()
+                + " - " + pos2.getX() + "," + pos2.getY() + "," + pos2.getZ();
+            return List.of(new LitematicaIntegration.SubRegionBox(name, pos1, pos2));
+        }
+
+        return List.of();
+    }
 
     // --- Setters (auto-save) ---
 
-    public static void setPos1(BlockPos pos) { ensureLoaded(); pos1 = pos; save(); }
-    public static void setPos2(BlockPos pos) { ensureLoaded(); pos2 = pos; save(); }
+    /** Sets pos1 and auto-disables Litematica sync if it was on. */
+    public static void setPos1(BlockPos pos) {
+        ensureLoaded();
+        if (syncLitematica) {
+            syncLitematica = false;
+            invalidateCache();
+        }
+        pos1 = pos;
+        save();
+    }
+
+    /** Sets pos2 and auto-disables Litematica sync if it was on. */
+    public static void setPos2(BlockPos pos) {
+        ensureLoaded();
+        if (syncLitematica) {
+            syncLitematica = false;
+            invalidateCache();
+        }
+        pos2 = pos;
+        save();
+    }
     public static void setRadius(int r) { ensureLoaded(); radius = Math.max(1, Math.min(64, r)); save(); }
     public static void setSpeed(double s) { ensureLoaded(); speed = Math.max(0.5, Math.min(100.0, s)); save(); }
     public static void setShowOutline(boolean v) { ensureLoaded(); showOutline = v; save(); }
@@ -144,7 +218,7 @@ public class SweepState {
 
     public static boolean hasPositions() {
         ensureLoaded();
-        return pos1 != null && pos2 != null;
+        return !resolveSubRegions().isEmpty();
     }
 
     // --- Normalized bounds ---
@@ -196,6 +270,8 @@ public class SweepState {
         running = false;
         savedStationIndex = -1;
         paused = false;
+        syncLitematica = true;
+        invalidateCache();
         save();
     }
 
@@ -212,6 +288,7 @@ public class SweepState {
         data.showPath = showPath;
         data.savedStationIndex = savedStationIndex;
         data.paused = paused;
+        data.syncLitematica = syncLitematica;
 
         try {
             Files.createDirectories(path.getParent());
@@ -234,6 +311,7 @@ public class SweepState {
             showPath = data.showPath;
             savedStationIndex = data.savedStationIndex;
             paused = data.paused;
+            syncLitematica = data.syncLitematica != null ? data.syncLitematica : true;
         } catch (IOException ignored) {}
     }
 }

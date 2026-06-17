@@ -33,6 +33,12 @@ public class SweepHighlightRenderer {
     private static final int VISITED_COLOR  = 0x888888;
     private static final int ACTIVE_COLOR   = 0xFFAA00;
 
+    /** Color palette for multi-region outline rendering. */
+    private static final int[] REGION_COLORS = {
+        0x55FF55, 0x55AAFF, 0xFFAA55, 0xFF55FF,
+        0x55FFAA, 0xAAAAFF, 0xFF5555, 0xAAFF55
+    };
+
     private SweepHighlightRenderer() {}
 
     public static void tick() {}
@@ -60,22 +66,59 @@ public class SweepHighlightRenderer {
 
         // --- Outline ---
         if (showOutline) {
-            float[] rgb = colorToRGB(OUTLINE_COLOR);
-            BlockPos p1 = SweepState.getPos1();
-            BlockPos p2 = SweepState.getPos2();
-            if (p1 != null && p2 != null) {
-                renderCuboidWireframe(poseStack, camPos, rgb[0], rgb[1], rgb[2], 0.6f);
-            } else if (p1 != null) {
-                renderBlockWireframe(poseStack, camPos, p1, rgb[0], rgb[1], rgb[2], 0.6f);
-            } else if (p2 != null) {
-                renderBlockWireframe(poseStack, camPos, p2, rgb[0], rgb[1], rgb[2], 0.6f);
+            List<LitematicaIntegration.SubRegionBox> subRegions = SweepState.resolveSubRegions();
+            SweepExecutor exe = SweepExecutor.getInstance();
+            boolean activeSweep = exe.isRunning() || exe.isPaused();
+
+            if (subRegions.size() > 1) {
+                // Multi-region: render each sub-region with a distinct color
+                for (int i = 0; i < subRegions.size(); i++) {
+                    var box = subRegions.get(i);
+                    int color = REGION_COLORS[i % REGION_COLORS.length];
+                    float[] rgb = colorToRGB(color);
+                    boolean isCurrent = activeSweep && i == exe.getCurrentRegionIndex();
+                    float alpha = isCurrent ? 0.8f : 0.35f;
+                    renderCuboidWireframe(poseStack, camPos,
+                        Math.min(box.pos1().getX(), box.pos2().getX()),
+                        Math.min(box.pos1().getY(), box.pos2().getY()),
+                        Math.min(box.pos1().getZ(), box.pos2().getZ()),
+                        Math.max(box.pos1().getX(), box.pos2().getX()),
+                        Math.max(box.pos1().getY(), box.pos2().getY()),
+                        Math.max(box.pos1().getZ(), box.pos2().getZ()),
+                        rgb[0], rgb[1], rgb[2], alpha);
+                }
+            } else if (subRegions.size() == 1) {
+                // Single region: classic green outline
+                var box = subRegions.get(0);
+                float[] rgb = colorToRGB(OUTLINE_COLOR);
+                renderCuboidWireframe(poseStack, camPos,
+                    Math.min(box.pos1().getX(), box.pos2().getX()),
+                    Math.min(box.pos1().getY(), box.pos2().getY()),
+                    Math.min(box.pos1().getZ(), box.pos2().getZ()),
+                    Math.max(box.pos1().getX(), box.pos2().getX()),
+                    Math.max(box.pos1().getY(), box.pos2().getY()),
+                    Math.max(box.pos1().getZ(), box.pos2().getZ()),
+                    rgb[0], rgb[1], rgb[2], 0.6f);
+            } else {
+                // No sub-regions: render single-block wireframe for individual pos if set
+                BlockPos p1 = SweepState.getPos1();
+                BlockPos p2 = SweepState.getPos2();
+                float[] rgb = colorToRGB(OUTLINE_COLOR);
+                if (p1 != null) {
+                    renderBlockWireframe(poseStack, camPos, p1, rgb[0], rgb[1], rgb[2], 0.6f);
+                } else if (p2 != null) {
+                    renderBlockWireframe(poseStack, camPos, p2, rgb[0], rgb[1], rgb[2], 0.6f);
+                }
             }
         }
 
         // --- Path lines ---
         List<Vec3> path = null;
         if (showPath) {
-            if (active) {
+            if (active && executor.getRegionCount() > 1) {
+                // Multi-region: concatenate all region paths
+                path = executor.getFullConcatPath();
+            } else if (active) {
                 path = executor.getStationPath();
             } else {
                 path = SweepExecutor.computePreviewPath();
@@ -106,10 +149,31 @@ public class SweepHighlightRenderer {
             Vec3 stationPos = executor.getCurrentStationPos();
             if (stationPos != null) {
                 float[] rgb = colorToRGB(ACTIVE_COLOR);
-                String label = executor.isPaused() ? "[PAUSED] Station " : "Station ";
+                String prefix;
+                if (executor.getRegionCount() > 1) {
+                    prefix = executor.getCurrentRegionName() + " ";
+                } else if (executor.isPaused()) {
+                    prefix = "[PAUSED] ";
+                } else {
+                    prefix = "";
+                }
+                String label = executor.isPaused() ? prefix + "Station " : prefix + "Station ";
                 renderStationMarker(poseStack, stationPos, camPos, rgb[0], rgb[1], rgb[2], 0.8f);
                 renderProgressLabel(poseStack, stationPos, camPos, camera, client, consumers,
                     label, executor.getCurrentStationIndex() + 1, executor.getTotalStations());
+            }
+        }
+
+        // --- Nearest station marker (set by /csweep nearest) ---
+        if (!active && executor.hasNearestStation()) {
+            Vec3 nearestPos = executor.getNearestStationPos();
+            if (nearestPos != null) {
+                // Bright white-yellow color, distinctive from the gold active marker
+                float[] rgb = new float[]{1.0f, 0.9f, 0.3f};
+                renderStationMarker(poseStack, nearestPos, camPos, rgb[0], rgb[1], rgb[2], 1.0f);
+                String label = "> NEAREST < Station ";
+                renderProgressLabel(poseStack, nearestPos, camPos, camera, client, consumers,
+                    label, executor.getNearestStationIndex() + 1, executor.getTotalStations());
             }
         }
     }
@@ -126,14 +190,20 @@ public class SweepHighlightRenderer {
 
     // --- Cuboid wireframe ---
 
+    /**
+     * Renders a cuboid wireframe with explicit bounds.
+     * Coordinates are block-space (min inclusive, max inclusive).
+     */
     private static void renderCuboidWireframe(PoseStack poseStack, Vec3 camPos,
+                                               int minX, int minY, int minZ,
+                                               int maxX, int maxY, int maxZ,
                                                float r, float g, float b, float a) {
-        float x1 = SweepState.getMinX() - (float) camPos.x;
-        float y1 = SweepState.getMinY() - (float) camPos.y;
-        float z1 = SweepState.getMinZ() - (float) camPos.z;
-        float x2 = SweepState.getMaxX() + 1 - (float) camPos.x;
-        float y2 = SweepState.getMaxY() + 1 - (float) camPos.y;
-        float z2 = SweepState.getMaxZ() + 1 - (float) camPos.z;
+        float x1 = minX - (float) camPos.x;
+        float y1 = minY - (float) camPos.y;
+        float z1 = minZ - (float) camPos.z;
+        float x2 = maxX + 1 - (float) camPos.x;
+        float y2 = maxY + 1 - (float) camPos.y;
+        float z2 = maxZ + 1 - (float) camPos.z;
 
         poseStack.pushPose();
         RenderSystem.enableBlend();

@@ -5,6 +5,7 @@ import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.sweep.LitematicaIntegration;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepState;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
@@ -109,6 +110,21 @@ public class CsweepCommand {
                         .executes(ctx -> toggleOutline(ctx.getSource())))
                     .then(literal("path")
                         .executes(ctx -> togglePath(ctx.getSource()))))
+                // ---- litematica ----
+                .then(literal("litematica")
+                    .then(literal("on")
+                        .executes(ctx -> setLitematicaSync(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setLitematicaSync(ctx.getSource(), false)))
+                    .then(literal("sync")
+                        .executes(ctx -> forceSyncLitematica(ctx.getSource())))
+                    .executes(ctx -> showLitematicaStatus(ctx.getSource())))
+                // ---- nearest (find nearest station to player) ----
+                .then(literal("nearest")
+                    .executes(ctx -> findNearestStation(ctx.getSource())))
+                // ---- next (skip to next sub-region) ----
+                .then(literal("next")
+                    .executes(ctx -> skipToNextRegion(ctx.getSource())))
                 // ---- expand ----
                 .then(literal("expand")
                     .then(argument("blocks", IntegerArgumentType.integer(1))
@@ -154,6 +170,9 @@ public class CsweepCommand {
     }
 
     private static int setPos1(FabricClientCommandSource source, int x, int y, int z) {
+        if (SweepState.isSyncLitematica()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.litematica.auto_disabled"));
+        }
         SweepState.setPos1(new BlockPos(x, y, z));
         source.sendFeedback(Component.translatable("client-tools.csweep.pos1_set", x, y, z));
         // Auto-enable outline when any position is set (even without the other)
@@ -179,6 +198,9 @@ public class CsweepCommand {
     }
 
     private static int setPos2(FabricClientCommandSource source, int x, int y, int z) {
+        if (SweepState.isSyncLitematica()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.litematica.auto_disabled"));
+        }
         SweepState.setPos2(new BlockPos(x, y, z));
         source.sendFeedback(Component.translatable("client-tools.csweep.pos2_set", x, y, z));
         if (!SweepState.isShowOutline()) {
@@ -296,6 +318,123 @@ public class CsweepCommand {
         return adjustCuboid(source, blocks, false);
     }
 
+    // ==================== litematica sync ====================
+
+    private static int setLitematicaSync(FabricClientCommandSource source, boolean enabled) {
+        SweepState.setSyncLitematica(enabled);
+        if (enabled) {
+            if (LitematicaIntegration.isAvailable()) {
+                var regions = LitematicaIntegration.getSubRegions();
+                if (regions.isEmpty()) {
+                    source.sendFeedback(Component.translatable(
+                        "client-tools.csweep.litematica.sync_on_no_selection"));
+                } else {
+                    source.sendFeedback(Component.translatable(
+                        "client-tools.csweep.litematica.sync_on", regions.size()));
+                }
+            } else {
+                source.sendFeedback(Component.translatable(
+                    "client-tools.csweep.litematica.not_available"));
+            }
+        } else {
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.sync_off"));
+        }
+        return 1;
+    }
+
+    private static int forceSyncLitematica(FabricClientCommandSource source) {
+        SweepExecutor executor = SweepExecutor.getInstance();
+        if (executor.isRunning() || executor.isPaused()) {
+            executor.stop();
+        }
+        SweepState.setSyncLitematica(true);
+        SweepState.refreshSubRegions();
+        return setLitematicaSync(source, true);
+    }
+
+    private static int showLitematicaStatus(FabricClientCommandSource source) {
+        boolean available = LitematicaIntegration.isAvailable();
+        boolean syncOn = SweepState.isSyncLitematica();
+        source.sendFeedback(Component.translatable("client-tools.csweep.litematica.status_header"));
+        source.sendFeedback(Component.translatable(
+            "client-tools.csweep.litematica.status_sync", syncOn ? "§aON" : "§7OFF"));
+        source.sendFeedback(Component.translatable(
+            "client-tools.csweep.litematica.status_available", available ? "§aYES" : "§cNO"));
+
+        if (!available) {
+            String err = LitematicaIntegration.getInitError();
+            if (err != null) {
+                source.sendFeedback(Component.literal("§cError: §7" + err));
+            }
+        }
+
+        if (available && syncOn) {
+            var regions = LitematicaIntegration.getSubRegions();
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.status_regions", regions.size()));
+            for (int i = 0; i < regions.size(); i++) {
+                var r = regions.get(i);
+                source.sendFeedback(Component.translatable(
+                    "client-tools.csweep.litematica.status_region",
+                    i + 1, r.name(),
+                    r.pos1().getX(), r.pos1().getY(), r.pos1().getZ(),
+                    r.pos2().getX(), r.pos2().getY(), r.pos2().getZ()));
+            }
+        }
+
+        SweepExecutor exe = SweepExecutor.getInstance();
+        if (exe.isRunning() || exe.isPaused() || SweepState.isPaused()) {
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.current_region",
+                exe.getCurrentRegionName(), exe.getCurrentRegionIndex() + 1, exe.getRegionCount()));
+        }
+        return 1;
+    }
+
+    private static int skipToNextRegion(FabricClientCommandSource source) {
+        SweepExecutor exe = SweepExecutor.getInstance();
+        if (!exe.isRunning() && !exe.isPaused()) {
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.not_in_sweep"));
+            return 0;
+        }
+        if (exe.skipToNextRegion()) {
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.region_skipped",
+                exe.getCurrentRegionName(), exe.getCurrentRegionIndex() + 1, exe.getRegionCount()));
+            return 1;
+        } else {
+            source.sendFeedback(Component.translatable(
+                "client-tools.csweep.litematica.no_next_region"));
+            return 0;
+        }
+    }
+
+    private static int findNearestStation(FabricClientCommandSource source) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
+            return 0;
+        }
+
+        SweepExecutor exe = SweepExecutor.getInstance();
+        if (exe.isRunning()) {
+            exe.stop();
+        }
+        SweepState.clearPauseState();
+
+        String info = exe.findNearestStation();
+        if (info == null) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.pos_not_set"));
+            return 0;
+        }
+
+        source.sendFeedback(Component.translatable("client-tools.csweep.nearest_found", info));
+        source.sendFeedback(Component.translatable("client-tools.csweep.nearest_hint"));
+        return 1;
+    }
+
     // ==================== radius / speed ====================
 
     private static int setRadius(FabricClientCommandSource source, int blocks) {
@@ -355,8 +494,14 @@ public class CsweepCommand {
             return 0;
         }
 
-        // If there's a saved paused state, resume instead
-        if (SweepState.isPaused()) {
+        SweepExecutor executor = SweepExecutor.getInstance();
+
+        // If a nearest station has been selected, always start from there
+        if (executor.hasNearestStation()) {
+            if (executor.isRunning()) executor.stop();
+            // Fall through to start below (nearest station is consumed in start())
+        } else if (SweepState.isPaused()) {
+            // If there's a saved paused state, resume instead
             return resumeSweep(source);
         }
 
@@ -372,7 +517,7 @@ public class CsweepCommand {
             source.sendFeedback(Component.translatable("client-tools.csweep.crafting_running"));
             return 0;
         }
-        if (SweepExecutor.getInstance().isRunning()) {
+        if (executor.isRunning()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.already_running"));
             return 0;
         }
@@ -382,19 +527,35 @@ public class CsweepCommand {
         if (!SweepState.isShowPath()) SweepState.setShowPath(true);
 
         SweepExecutor.getInstance().start();
-        long volume = SweepState.getVolume();
+        // Total stations are computed during start, estimate now
+        double spacing = Math.max(1.0, SweepState.getRadius() * 1.5);
+        var subRegions = SweepState.resolveSubRegions();
+        int estStations = 0;
+        long volume = 0;
+        for (var box : subRegions) {
+            int bx1 = Math.min(box.pos1().getX(), box.pos2().getX());
+            int bx2 = Math.max(box.pos1().getX(), box.pos2().getX());
+            int by1 = Math.min(box.pos1().getY(), box.pos2().getY());
+            int by2 = Math.max(box.pos1().getY(), box.pos2().getY());
+            int bz1 = Math.min(box.pos1().getZ(), box.pos2().getZ());
+            int bz2 = Math.max(box.pos1().getZ(), box.pos2().getZ());
+            int sdx = bx2 - bx1;
+            int sdy = by2 - by1;
+            int sdz = bz2 - bz1;
+            estStations += ((int) Math.ceil(sdx / spacing) + 1)
+                         * ((int) Math.ceil(sdy / spacing) + 1)
+                         * ((int) Math.ceil(sdz / spacing) + 1);
+            volume += (long) (sdx + 1) * (sdy + 1) * (sdz + 1);
+        }
         String volumeStr = volume >= 1_000_000 ? String.format("%.1fM", volume / 1_000_000.0)
             : volume >= 1_000 ? String.format("%.1fK", volume / 1_000.0)
             : String.valueOf(volume);
-        // Total stations are computed during BUILD_PATH, estimate now
-        double spacing = Math.max(1.0, SweepState.getRadius() * 1.5);
-        int dx = SweepState.getMaxX() - SweepState.getMinX();
-        int dy = SweepState.getMaxY() - SweepState.getMinY();
-        int dz = SweepState.getMaxZ() - SweepState.getMinZ();
-        int estStations = ((int) Math.ceil(dx / spacing) + 1)
-                        * ((int) Math.ceil(dy / spacing) + 1)
-                        * ((int) Math.ceil(dz / spacing) + 1);
-        source.sendFeedback(Component.translatable("client-tools.csweep.start", estStations, volumeStr));
+        if (SweepExecutor.getInstance().getCurrentStationIndex() > 1) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.start_nearest",
+                SweepExecutor.getInstance().getCurrentStationIndex(), estStations, volumeStr));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.start", estStations, volumeStr));
+        }
         return 1;
     }
 
@@ -449,6 +610,14 @@ public class CsweepCommand {
 
     private static int showStatus(FabricClientCommandSource source) {
         source.sendFeedback(Component.translatable("client-tools.csweep.status_header"));
+
+        // Sync source
+        source.sendFeedback(Component.translatable("client-tools.csweep.litematica.status_sync",
+            SweepState.isSyncLitematica() ? "§aLitematica" : "§7Manual"));
+
+        // Region count
+        var regions = SweepState.resolveSubRegions();
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_regions", regions.size()));
 
         BlockPos p1 = SweepState.getPos1();
         if (p1 != null) {
