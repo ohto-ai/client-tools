@@ -19,7 +19,7 @@ Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/relea
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
 - **`/cchat`** — Quick chat message sender
 - **`/cfly`** — Flight toggle with jump and status display
-- **`/csweep`** — Snake-pattern area traversal for automated clearing (works with projection printers and auto-mining mods)
+- **`/csweep`** — Snake-pattern area traversal for automated clearing (works with Litematica-printer)
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 
 All features run entirely on the client side. No server-side installation is required.
@@ -34,7 +34,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
 - **`/cchat`** — 快捷聊天消息发送
 - **`/cfly`** — 飞行开关，支持起跳和状态查看
-- **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机和自动挖掘 mod 实现区域清空
+- **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机实现区域清空
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 
 所有功能均完全在客户端运行，无需服务端安装。
