@@ -883,13 +883,17 @@ public class SweepExecutor {
     }
 
     /**
-     * Adjusts the Y coordinate when the target position would put the
-     * player's head in water — scanning upward for an air block and
-     * raising the player above the water surface.  This avoids the 5×
-     * underwater mining penalty entirely, rather than just slowing down.
+     * Adjusts the Y coordinate to keep the player's head above water
+     * when the water is shallow enough that the seabed remains within
+     * mining reach.  Deep water is left unchanged and handled by the
+     * water slowdown instead.
      *
-     * <p>If no air is found within 3 blocks up (fully submerged cave),
-     * the position is returned unchanged and the water slowdown will apply.
+     * <p>Skips adjustment when:
+     * <ul>
+     *   <li>Fully submerged (no air within 3 blocks up)</li>
+     *   <li>Water is too deep — raising above surface would put the
+     *       bottom out of mining reach</li>
+     * </ul>
      */
     private Vec3 avoidWater(Minecraft client, Vec3 pos) {
         if (!SweepState.isAutoSpeed() || client.level == null || client.player == null) return pos;
@@ -906,11 +910,29 @@ public class SweepExecutor {
 
         // Scan up for air
         for (int dy = 1; dy <= 3; dy++) {
-            BlockPos checkPos = eyePos.above(dy);
-            BlockState checkState = client.level.getBlockState(checkPos);
+            BlockPos airPos = eyePos.above(dy);
+            BlockState checkState = client.level.getBlockState(airPos);
             if (checkState.isAir()) {
-                // Found air — place eyes just above water surface
-                double newY = checkPos.getY() + 0.1 - client.player.getEyeHeight();
+                // Found air surface — check if we can still reach the bottom
+                double newY = airPos.getY() + 0.1 - client.player.getEyeHeight();
+                double newEyeY = newY + client.player.getEyeHeight();
+
+                // Find the bottom (first non-water, non-air block below the player)
+                BlockPos bottomPos = eyePos;
+                for (int d = 0; d <= 10; d++) {
+                    bottomPos = bottomPos.below();
+                    BlockState bs = client.level.getBlockState(bottomPos);
+                    if (bs.isAir()) break; // air pocket — no solid bottom to mine
+                    if (!bs.getFluidState().is(FluidTags.WATER)) break; // solid bottom
+                }
+
+                double distToBottom = newEyeY - (bottomPos.getY() + 1.0);
+                double reach = client.player.blockInteractionRange();
+                if (distToBottom > reach) {
+                    // Too deep — adjusted position can't reach the bottom
+                    return pos;
+                }
+
                 return new Vec3(pos.x, newY, pos.z);
             }
         }
