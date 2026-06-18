@@ -40,6 +40,9 @@
     "custom": {
         "modmenu": {
             "update_checker": true
+        },
+        "mc-publish": {
+            "curseforge": 1575410
         }
     }
 }
