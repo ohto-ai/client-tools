@@ -42,7 +42,8 @@
             "update_checker": true
         },
         "mc-publish": {
-            "curseforge": 1575410
+            "curseforge": 1575410,
+            "modrinth": "zLOwSXvw"
         }
     }
 }
