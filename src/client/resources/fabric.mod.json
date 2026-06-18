@@ -35,5 +35,11 @@
     },
     "suggests": {
         "litematica": "*"
+    },
+    
+    "custom": {
+        "modmenu": {
+            "update_checker": true
+        }
     }
 }
