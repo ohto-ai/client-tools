@@ -105,6 +105,12 @@ public class CsweepCommand {
                         .executes(ctx -> setSpeed(ctx.getSource(),
                             DoubleArgumentType.getDouble(ctx, "bpt"))))
                     .executes(ctx -> showSpeed(ctx.getSource())))
+                // ---- maxspeed ----
+                .then(literal("maxspeed")
+                    .then(argument("bpt", DoubleArgumentType.doubleArg(0.5, 100.0))
+                        .executes(ctx -> setMaxSpeed(ctx.getSource(),
+                            DoubleArgumentType.getDouble(ctx, "bpt"))))
+                    .executes(ctx -> showMaxSpeed(ctx.getSource())))
                 // ---- show ----
                 .then(literal("show")
                     .executes(ctx -> showDisplayStatus(ctx.getSource()))
@@ -148,6 +154,13 @@ public class CsweepCommand {
                         .executes(ctx -> setNearestTracking(ctx.getSource(), true)))
                     .then(literal("off")
                         .executes(ctx -> setNearestTracking(ctx.getSource(), false))))
+                // ---- autospeed (adaptive speed based on block density) ----
+                .then(literal("autospeed")
+                    .executes(ctx -> toggleAutoSpeed(ctx.getSource()))
+                    .then(literal("on")
+                        .executes(ctx -> setAutoSpeed(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setAutoSpeed(ctx.getSource(), false))))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -490,6 +503,28 @@ public class CsweepCommand {
         return 1;
     }
 
+    // ==================== autospeed ====================
+
+    private static int toggleAutoSpeed(FabricClientCommandSource source) {
+        return setAutoSpeed(source, !SweepState.isAutoSpeed());
+    }
+
+    private static int setAutoSpeed(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isAutoSpeed() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.autospeed_already_on" : "client-tools.csweep.autospeed_already_off"));
+            return 1;
+        }
+        SweepState.setAutoSpeed(enabled);
+        if (enabled) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.autospeed_on",
+                SweepState.getSpeed(), SweepState.getMaxSpeed()));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.autospeed_off"));
+        }
+        return 1;
+    }
+
     // ==================== radius / speed ====================
 
     private static int setRadius(FabricClientCommandSource source, int blocks) {
@@ -511,6 +546,19 @@ public class CsweepCommand {
 
     private static int showSpeed(FabricClientCommandSource source) {
         source.sendFeedback(Component.translatable("client-tools.csweep.speed_show", SweepState.getSpeed()));
+        return 1;
+    }
+
+    // ==================== maxspeed ====================
+
+    private static int setMaxSpeed(FabricClientCommandSource source, double bpt) {
+        SweepState.setMaxSpeed(bpt);
+        source.sendFeedback(Component.translatable("client-tools.csweep.maxspeed_set", bpt));
+        return 1;
+    }
+
+    private static int showMaxSpeed(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.csweep.maxspeed_show", SweepState.getMaxSpeed()));
         return 1;
     }
 
@@ -746,6 +794,9 @@ public class CsweepCommand {
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_radius", SweepState.getRadius()));
         source.sendFeedback(Component.translatable("client-tools.csweep.status_speed", SweepState.getSpeed()));
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_maxspeed", SweepState.getMaxSpeed()));
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_autospeed",
+            SweepState.isAutoSpeed() ? "§aON" : "§7OFF"));
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_show",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",

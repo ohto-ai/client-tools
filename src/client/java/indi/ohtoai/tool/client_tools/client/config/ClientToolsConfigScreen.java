@@ -193,6 +193,24 @@ public final class ClientToolsConfigScreen {
             .setSaveConsumer(SweepState::setSpeed)
             .build());
 
+        sweep.addEntry(eb.startBooleanToggle(
+            Component.translatable("option.client-tools.sweep.autospeed"),
+            SweepState.isAutoSpeed())
+            .setDefaultValue(false)
+            .setTooltip(Component.translatable("tooltip.client-tools.sweep.autospeed"))
+            .setSaveConsumer(SweepState::setAutoSpeed)
+            .build());
+
+        sweep.addEntry(eb.startDoubleField(
+            Component.translatable("option.client-tools.sweep.maxspeed"),
+            SweepState.getMaxSpeed())
+            .setDefaultValue(30.0)
+            .setMin(0.5)
+            .setMax(100.0)
+            .setTooltip(Component.translatable("tooltip.client-tools.sweep.maxspeed"))
+            .setSaveConsumer(SweepState::setMaxSpeed)
+            .build());
+
         if (LitematicaIntegration.isAvailable()) {
             sweep.addEntry(eb.startBooleanToggle(
                 Component.translatable("option.client-tools.sweep.litematica_sync"),

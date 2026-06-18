@@ -1,8 +1,10 @@
 package indi.ohtoai.tool.client_tools.client.sweep;
 
 import net.minecraft.client.Minecraft;
+import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
 import java.util.ArrayList;
@@ -107,6 +109,11 @@ public class SweepExecutor {
     private double approachDistance = 0.0;
     private double approachTraveled = 0.0;
     private static final double APPROACH_THRESHOLD = 1.5; // skip approach if within this distance
+
+    // Block density scan (for adaptive speed)
+    private int densityScanTickCounter = 0;
+    private double cachedDensity = 0.0;
+    private static final int DENSITY_SCAN_INTERVAL = 10; // scan every 10 ticks (2 Hz)
 
     // --- Public API ---
 
@@ -388,13 +395,18 @@ public class SweepExecutor {
         for (int i = filled; i < ACTION_BAR_WIDTH; i++) bar.append('░');
         bar.append("§a]");
 
-        double speed = SweepState.getSpeed();
+        double speed = SweepState.isAutoSpeed()
+            ? (SweepState.getMaxSpeed() - cachedDensity * (SweepState.getMaxSpeed() - SweepState.getSpeed()))
+            : SweepState.getSpeed();
         double remainingDist = totalAllRegionsLength - completedDist;
         long etaSeconds = speed > 0 ? (long) Math.ceil(remainingDist / speed) : 0;
 
         int station = globalStationOffset + currentStationIndex;
+        String speedPart = SweepState.isAutoSpeed()
+            ? ("§dAUTO §f" + String.format("%.1f", speed))
+            : ("§f" + String.format("%.1f", speed));
         String msg = bar + " §b" + String.format("%.1f", pct) + "%% §7| §e"
-            + compactEta(etaSeconds) + " §7| §f" + station + "/" + totalStations;
+            + compactEta(etaSeconds) + " §7| " + speedPart + " §7| §f" + station + "/" + totalStations;
         client.player.displayClientMessage(Component.literal(msg), true);
     }
 
@@ -678,7 +690,18 @@ public class SweepExecutor {
     // --- APPROACHING (smooth fly-in to path start) ---
 
     private void doApproach(Minecraft client) {
-        double step = SweepState.getSpeed() / 20.0;
+        // Compute direction for density scan
+        Vec3 direction = null;
+        if (approachTarget != null && approachOrigin != null) {
+            Vec3 dir = approachTarget.subtract(approachOrigin);
+            if (dir.lengthSqr() > 1e-6) {
+                direction = dir.normalize();
+            }
+        }
+
+        double effectiveSpeed = getEffectiveSpeed(
+            approachOrigin != null ? approachOrigin : client.player.position(), direction);
+        double step = effectiveSpeed / 20.0;
         approachTraveled += step;
 
         if (approachTraveled >= approachDistance) {
@@ -713,8 +736,22 @@ public class SweepExecutor {
             return;
         }
 
-        // Advance along the path at constant speed
-        double step = SweepState.getSpeed() / 20.0;
+        // Determine movement direction from current segment
+        int segIdx = findSegment(distanceTraveled);
+        Vec3 direction = null;
+        if (segIdx < segments.size()) {
+            PathSegment seg = segments.get(segIdx);
+            Vec3 dir = seg.end.subtract(seg.start);
+            if (dir.lengthSqr() > 1e-6) {
+                direction = dir.normalize();
+            }
+        }
+
+        // Compute effective speed (adaptive or constant)
+        double effectiveSpeed = getEffectiveSpeed(client.player.position(), direction);
+
+        // Advance along the path
+        double step = effectiveSpeed / 20.0;
         distanceTraveled += step;
 
         if (distanceTraveled >= totalPathLength) {
@@ -727,8 +764,8 @@ public class SweepExecutor {
             return;
         }
 
-        // Find which segment we're in
-        int segIdx = findSegment(distanceTraveled);
+        // Determine which segment we're now in (may have changed after the step)
+        segIdx = findSegment(distanceTraveled);
         currentStationIndex = segIdx + 1; // next station we're heading toward
 
         // Interpolate position along this segment
@@ -760,6 +797,99 @@ public class SweepExecutor {
             }
         }
         return lo;
+    }
+
+    // --- Adaptive speed (block-density-based) ---
+
+    /**
+     * Computes the effective movement speed for the current tick.
+     * When auto speed is enabled, interpolates between min and max speed
+     * based on cached block density ahead.  Otherwise returns the base speed.
+     */
+    private double getEffectiveSpeed(Vec3 playerPos, Vec3 direction) {
+        if (!SweepState.isAutoSpeed()) {
+            return SweepState.getSpeed();
+        }
+        double minSpeed = SweepState.getSpeed();
+        double maxSpeed = SweepState.getMaxSpeed();
+        if (maxSpeed < minSpeed) {
+            return minSpeed;
+        }
+
+        // Periodic density scan
+        densityScanTickCounter++;
+        if (densityScanTickCounter >= DENSITY_SCAN_INTERVAL && direction != null) {
+            densityScanTickCounter = 0;
+            cachedDensity = computeBlockDensity(playerPos, direction);
+        }
+
+        // Linear interpolation: density=0 → maxSpeed, density=1 → minSpeed
+        return maxSpeed - cachedDensity * (maxSpeed - minSpeed);
+    }
+
+    /**
+     * Scans a cylindrical volume ahead of the player along the movement
+     * direction and returns the fraction of blocks that are non-air (solid).
+     *
+     * @param playerPos current player position
+     * @param direction unit vector in the movement direction
+     * @return density ratio [0, 1] — 0 means all air, 1 means all solid
+     */
+    private double computeBlockDensity(Vec3 playerPos, Vec3 direction) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.level == null || direction.lengthSqr() < 1e-6) return 0.0;
+
+        int r = SweepState.getRadius();
+        double scanLength = Math.max(r * 1.5, 3.0);
+
+        // Compute bounding box of the scan cylinder (world-aligned)
+        Vec3 scanEnd = playerPos.add(direction.scale(scanLength));
+        int minX = (int) Math.floor(Math.min(playerPos.x, scanEnd.x) - r);
+        int maxX = (int) Math.ceil(Math.max(playerPos.x, scanEnd.x) + r);
+        int minY = (int) Math.floor(Math.min(playerPos.y, scanEnd.y) - r);
+        int maxY = (int) Math.ceil(Math.max(playerPos.y, scanEnd.y) + r);
+        int minZ = (int) Math.floor(Math.min(playerPos.z, scanEnd.z) - r);
+        int maxZ = (int) Math.ceil(Math.max(playerPos.z, scanEnd.z) + r);
+
+        int nonAir = 0;
+        int total = 0;
+        // Adaptive step size: use 1-block steps for small radii, 2 for larger
+        int step = r <= 4 ? 1 : 2;
+
+        for (int x = minX; x <= maxX; x += step) {
+            for (int y = minY; y <= maxY; y += step) {
+                for (int z = minZ; z <= maxZ; z += step) {
+                    Vec3 blockCenter = new Vec3(x + 0.5, y + 0.5, z + 0.5);
+
+                    // Project onto direction to get distance along cylinder axis
+                    Vec3 toBlock = blockCenter.subtract(playerPos);
+                    double alongDist = toBlock.dot(direction);
+
+                    // Must be within [0, scanLength] along the direction
+                    if (alongDist < 0 || alongDist > scanLength) continue;
+
+                    // Perpendicular distance from the cylinder axis
+                    Vec3 projection = playerPos.add(direction.scale(alongDist));
+                    double perpDist = blockCenter.distanceTo(projection);
+
+                    if (perpDist > r) continue;
+
+                    BlockPos bp = new BlockPos((int) Math.floor(blockCenter.x),
+                        (int) Math.floor(blockCenter.y),
+                        (int) Math.floor(blockCenter.z));
+                    if (client.level.isLoaded(bp)) {
+                        total++;
+                        BlockState state = client.level.getBlockState(bp);
+                        if (!state.isAir()) {
+                            nonAir++;
+                        }
+                    }
+                }
+            }
+        }
+
+        if (total == 0) return 0.0;
+        return (double) nonAir / total;
     }
 
     // --- Multi-region path building ---

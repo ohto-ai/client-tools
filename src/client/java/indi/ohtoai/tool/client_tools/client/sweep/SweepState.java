@@ -35,6 +35,8 @@ public class SweepState {
     private static boolean paused = false;
     private static boolean unfinished = false;
     private static boolean syncLitematica = true;
+    private static boolean autoSpeed = false;
+    private static double maxSpeed = 30.0;
     private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -55,6 +57,8 @@ public class SweepState {
         boolean paused = false;
         boolean unfinished = false;
         Boolean syncLitematica; // boxed so missing (old config) defaults to true
+        Boolean autoSpeed;      // boxed so missing (old config) defaults to false
+        Double maxSpeed;        // boxed so missing (old config) defaults to 30.0
     }
 
     @SuppressWarnings("unused")
@@ -107,6 +111,8 @@ public class SweepState {
             paused = false;
             unfinished = false;
             syncLitematica = true;
+            autoSpeed = false;
+            maxSpeed = 30.0;
             invalidateCache();
             load();
             loaded = true;
@@ -128,6 +134,8 @@ public class SweepState {
     public static boolean isPaused() { ensureLoaded(); return paused; }
     public static boolean isUnfinished() { ensureLoaded(); return unfinished; }
     public static boolean isSyncLitematica() { ensureLoaded(); return syncLitematica; }
+    public static boolean isAutoSpeed() { ensureLoaded(); return autoSpeed; }
+    public static double getMaxSpeed() { ensureLoaded(); return maxSpeed; }
     public static int getAreaVersion() { ensureLoaded(); return areaVersion; }
 
     /**
@@ -211,6 +219,8 @@ public class SweepState {
     public static void setShowPath(boolean v) { ensureLoaded(); showPath = v; save(); }
     public static void setShowNearestDirection(boolean v) { ensureLoaded(); showNearestDirection = v; save(); }
     public static void setHighlightCurrentLayer(boolean v) { ensureLoaded(); highlightCurrentLayer = v; save(); }
+    public static void setAutoSpeed(boolean v) { ensureLoaded(); autoSpeed = v; save(); }
+    public static void setMaxSpeed(double s) { ensureLoaded(); maxSpeed = Math.max(0.5, Math.min(100.0, s)); save(); }
 
     // --- Pause state (persisted) ---
 
@@ -313,6 +323,8 @@ public class SweepState {
         paused = false;
         unfinished = false;
         syncLitematica = true;
+        autoSpeed = false;
+        maxSpeed = 30.0;
         areaVersion++;
         invalidateCache();
         save();
@@ -335,6 +347,8 @@ public class SweepState {
         data.paused = paused;
         data.unfinished = unfinished;
         data.syncLitematica = syncLitematica;
+        data.autoSpeed = autoSpeed;
+        data.maxSpeed = maxSpeed;
 
         try {
             Files.createDirectories(path.getParent());
@@ -361,6 +375,8 @@ public class SweepState {
             paused = data.paused;
             unfinished = data.unfinished;
             syncLitematica = data.syncLitematica != null ? data.syncLitematica : true;
+            autoSpeed = data.autoSpeed != null ? data.autoSpeed : false;
+            maxSpeed = data.maxSpeed != null ? data.maxSpeed : 30.0;
         } catch (IOException ignored) {}
     }
 }
