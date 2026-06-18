@@ -714,9 +714,10 @@ public class SweepExecutor {
 
         if (approachTraveled >= approachDistance) {
             // Arrived — snap to target and transition to MOVING
-            client.player.setPos(approachTarget.x, approachTarget.y, approachTarget.z);
+            Vec3 target = avoidWater(client, approachTarget);
+            client.player.setPos(target.x, target.y, target.z);
             client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-                approachTarget.x, approachTarget.y, approachTarget.z, client.player.onGround()));
+                target.x, target.y, target.z, getSpoofedOnGround(client)));
             state = State.MOVING;
             return;
         }
@@ -731,9 +732,10 @@ public class SweepExecutor {
             approachOrigin.z + (approachTarget.z - approachOrigin.z) * t
         );
 
+        Vec3 adjusted = avoidWater(client, pos);
         client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-            pos.x, pos.y, pos.z, client.player.onGround()));
-        client.player.setPos(pos.x, pos.y, pos.z);
+            adjusted.x, adjusted.y, adjusted.z, getSpoofedOnGround(client)));
+        client.player.setPos(adjusted.x, adjusted.y, adjusted.z);
     }
 
     // --- MOVING (continuous interpolation) ---
@@ -764,10 +766,10 @@ public class SweepExecutor {
 
         if (distanceTraveled >= totalPathLength) {
             // Reached end — snap to final station
-            Vec3 end = stationPath.get(stationPath.size() - 1);
+            Vec3 end = avoidWater(client, stationPath.get(stationPath.size() - 1));
             client.player.setPos(end.x, end.y, end.z);
             client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-                end.x, end.y, end.z, client.player.onGround()));
+                end.x, end.y, end.z, getSpoofedOnGround(client)));
             finish();
             return;
         }
@@ -788,9 +790,10 @@ public class SweepExecutor {
             (seg.end.z - seg.start.z) * t
         );
 
+        Vec3 adjusted = avoidWater(client, pos);
         client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
-            pos.x, pos.y, pos.z, client.player.onGround()));
-        client.player.setPos(pos.x, pos.y, pos.z);
+            adjusted.x, adjusted.y, adjusted.z, getSpoofedOnGround(client)));
+        client.player.setPos(adjusted.x, adjusted.y, adjusted.z);
     }
 
     /** Binary search for the segment containing the given distance. */
@@ -866,6 +869,54 @@ public class SweepExecutor {
     private boolean checkPlayerInWater(Minecraft client) {
         if (client.player == null) return false;
         return client.player.isEyeInFluid(FluidTags.WATER);
+    }
+
+    /**
+     * Returns the {@code onGround} flag for movement packets.
+     * When auto speed is on, spoofs {@code true} to eliminate the 5×
+     * floating mining penalty.  Since {@code /cfly} enables flight
+     * permissions, the server won't kick for the inconsistency.
+     */
+    private boolean getSpoofedOnGround(Minecraft client) {
+        if (SweepState.isAutoSpeed()) return true;
+        return client.player != null && client.player.onGround();
+    }
+
+    /**
+     * Adjusts the Y coordinate when the target position would put the
+     * player's head in water — scanning upward for an air block and
+     * raising the player above the water surface.  This avoids the 5×
+     * underwater mining penalty entirely, rather than just slowing down.
+     *
+     * <p>If no air is found within 3 blocks up (fully submerged cave),
+     * the position is returned unchanged and the water slowdown will apply.
+     */
+    private Vec3 avoidWater(Minecraft client, Vec3 pos) {
+        if (!SweepState.isAutoSpeed() || client.level == null || client.player == null) return pos;
+
+        double eyeY = pos.y + client.player.getEyeHeight();
+        BlockPos eyePos = new BlockPos(
+            (int) Math.floor(pos.x),
+            (int) Math.floor(eyeY),
+            (int) Math.floor(pos.z));
+
+        // Not in water — no adjustment needed
+        BlockState eyeState = client.level.getBlockState(eyePos);
+        if (!eyeState.getFluidState().is(FluidTags.WATER)) return pos;
+
+        // Scan up for air
+        for (int dy = 1; dy <= 3; dy++) {
+            BlockPos checkPos = eyePos.above(dy);
+            BlockState checkState = client.level.getBlockState(checkPos);
+            if (checkState.isAir()) {
+                // Found air — place eyes just above water surface
+                double newY = checkPos.getY() + 0.1 - client.player.getEyeHeight();
+                return new Vec3(pos.x, newY, pos.z);
+            }
+        }
+
+        // Fully submerged — keep original position, water slowdown handles it
+        return pos;
     }
 
     /**
