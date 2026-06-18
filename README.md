@@ -3,7 +3,7 @@
 [![Development Builds](https://github.com/ohto-ai/client-tools/actions/workflows/build.yml/badge.svg)](https://github.com/ohto-ai/client-tools/actions/workflows/build.yml)
 [![Publish Release](https://github.com/ohto-ai/client-tools/actions/workflows/release.yml/badge.svg?event=release)](https://github.com/ohto-ai/client-tools/actions/workflows/release.yml)
 
-Support Minecraft 1.21 | [Release](https://github.com/ohto-ai/client-tools/releases)
+Support Minecraft 1.21~1.21.8 | [Release](https://github.com/ohto-ai/client-tools/releases)
 
 **客户端自动化工具集：自动合成、定时调度、快捷聊天、飞行控制、蛇形扫掠 / A collection of client-side automation tools: auto crafting, timed scheduler, quick chat, flight toggle, and snake-pattern area traversal.**
 
@@ -287,7 +287,7 @@ Output JAR: `build/libs/client-tools-*.jar`
 
 ## Dependencies
 
-- Minecraft 1.21
+- Minecraft 1.21~1.21.8
 - Fabric Loader >= 0.16.10
 - Fabric API
 - Java >= 21
