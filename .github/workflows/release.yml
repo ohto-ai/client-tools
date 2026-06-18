@@ -79,7 +79,7 @@ jobs:
           modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
           curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
 
-          files-primary: ${{ steps.findjar.outputs.jarpath }}
+          files: ${{ steps.findjar.outputs.jarpath }}
 
           name: ClientTools v${{ needs.Get-Properties.outputs.mod-version }}
           version: ${{ needs.Get-Properties.outputs.mod-version }}
