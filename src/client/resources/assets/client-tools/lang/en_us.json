@@ -219,14 +219,37 @@
   "title.client-tools.config": "Client Tools Settings",
 
   "category.client-tools.flight": "Flight",
+  "category.client-tools.craft": "Craft",
+  "category.client-tools.timer": "Timer",
   "category.client-tools.sweep": "Sweep",
   "category.client-tools.display": "Display",
   "category.client-tools.status": "Status",
 
   "text.client-tools.config.flight_description": "§7Control flight state through this toggle or use §e/cfly§7.",
+  "text.client-tools.config.craft_description": "§7Configure crafting automation parameters. Same as §e/ccraft§7 subcommands.",
+  "text.client-tools.config.station_label": "§7--- Station (Crafting Table) ---",
+  "text.client-tools.config.input_label": "§7--- Input Box ---",
+  "text.client-tools.config.output_label": "§7--- Output Box ---",
+
   "option.client-tools.cfly.enabled": "Flying",
   "option.client-tools.cfly.autojump": "Auto Jump",
   "tooltip.client-tools.cfly.autojump": "§7When enabled, /cfly and /cfly enable will also make the player jump.",
+
+  "option.client-tools.ccraft.product": "Product Item",
+  "tooltip.client-tools.ccraft.product": "§7Target item to craft, e.g. §eminecraft:diamond_block§7. Required.",
+  "option.client-tools.ccraft.source": "Source Item",
+  "tooltip.client-tools.ccraft.source": "§7Source item to start from (optional). Leave empty for auto-detect mode.",
+  "option.client-tools.ccraft.station_x": "Station X",
+  "option.client-tools.ccraft.station_y": "Station Y",
+  "option.client-tools.ccraft.station_z": "Station Z",
+  "option.client-tools.ccraft.input_x": "Input Box X",
+  "option.client-tools.ccraft.input_y": "Input Box Y",
+  "option.client-tools.ccraft.input_z": "Input Box Z",
+  "option.client-tools.ccraft.output_x": "Output Box X",
+  "option.client-tools.ccraft.output_y": "Output Box Y",
+  "option.client-tools.ccraft.output_z": "Output Box Z",
+  "option.client-tools.ccraft.count": "Repeat Count",
+  "tooltip.client-tools.ccraft.count": "§7How many final products to craft. §e-1 §7= infinite (until materials run out).",
 
   "option.client-tools.sweep.radius": "Sweep Radius",
   "tooltip.client-tools.sweep.radius": "§7Station spacing in blocks (1–64).",
@@ -241,9 +264,13 @@
   "option.client-tools.sweep.show_layer": "Layer Emphasis",
   "option.client-tools.sweep.show_dir": "Direction Line",
 
+  "text.client-tools.config.timer_count": "Active Timers: %d",
+  "text.client-tools.config.timer_empty": "§7No active timers. Use §e/ctimer start §7to create one.",
+  "text.client-tools.config.timer_entry": "§b#%d §f%s §7(every %s, %s remaining)",
+  "text.client-tools.config.timer_infinite": "∞",
+
   "text.client-tools.config.sweep_status": "Sweep: %s",
   "text.client-tools.config.craft_status": "Craft: %s",
-  "text.client-tools.config.timer_count": "Active Timers: %d",
 
   "text.client-tools.config.status_running": "§aRunning (%d/%d)",
   "text.client-tools.config.status_paused": "§ePaused at station %d"

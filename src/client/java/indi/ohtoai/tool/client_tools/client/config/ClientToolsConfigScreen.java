@@ -6,13 +6,20 @@ import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.LitematicaIntegration;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepState;
+import indi.ohtoai.tool.client_tools.client.timer.TimerInstance;
 import indi.ohtoai.tool.client_tools.client.timer.TimerManager;
 import me.shedaniel.clothconfig2.api.ConfigBuilder;
 import me.shedaniel.clothconfig2.api.ConfigCategory;
 import me.shedaniel.clothconfig2.api.ConfigEntryBuilder;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
+import net.minecraft.core.BlockPos;
+import net.minecraft.core.registries.BuiltInRegistries;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.ResourceLocation;
+import net.minecraft.world.item.Item;
+
+import java.util.List;
 
 /**
  * Builds the Cloth Config settings screen for Client Tools.
@@ -60,6 +67,108 @@ public final class ClientToolsConfigScreen {
             .setSaveConsumer(CflyCommand::setAutoJump)
             .setDefaultValue(false)
             .setTooltip(Component.translatable("tooltip.client-tools.cfly.autojump"))
+            .build());
+
+        // ---- Craft ----
+        ConfigCategory craft = builder.getOrCreateCategory(
+            Component.translatable("category.client-tools.craft"));
+
+        craft.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.craft_description"))
+            .build());
+
+        craft.addEntry(eb.startStrField(
+            Component.translatable("option.client-tools.ccraft.product"),
+            getCraftItemId(CcraftState.getProductItem()))
+            .setDefaultValue("")
+            .setTooltip(Component.translatable("tooltip.client-tools.ccraft.product"))
+            .setSaveConsumer(v -> setCraftItem(v, true))
+            .build());
+
+        craft.addEntry(eb.startStrField(
+            Component.translatable("option.client-tools.ccraft.source"),
+            getCraftItemId(CcraftState.getSourceItem()))
+            .setDefaultValue("")
+            .setTooltip(Component.translatable("tooltip.client-tools.ccraft.source"))
+            .setSaveConsumer(v -> setCraftItem(v, false))
+            .build());
+
+        // Station position
+        craft.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.station_label"))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.station_x"),
+            getPosCoord(CcraftState.getStationPos(), 'x'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'x', true, false, false))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.station_y"),
+            getPosCoord(CcraftState.getStationPos(), 'y'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'y', true, false, false))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.station_z"),
+            getPosCoord(CcraftState.getStationPos(), 'z'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'z', true, false, false))
+            .build());
+
+        // Input position
+        craft.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.input_label"))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.input_x"),
+            getPosCoord(CcraftState.getInputPos(), 'x'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'x', false, true, false))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.input_y"),
+            getPosCoord(CcraftState.getInputPos(), 'y'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'y', false, true, false))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.input_z"),
+            getPosCoord(CcraftState.getInputPos(), 'z'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'z', false, true, false))
+            .build());
+
+        // Output position
+        craft.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.output_label"))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.output_x"),
+            getPosCoord(CcraftState.getOutputPos(), 'x'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'x', false, false, true))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.output_y"),
+            getPosCoord(CcraftState.getOutputPos(), 'y'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'y', false, false, true))
+            .build());
+        craft.addEntry(eb.startIntField(
+            Component.translatable("option.client-tools.ccraft.output_z"),
+            getPosCoord(CcraftState.getOutputPos(), 'z'))
+            .setDefaultValue(0)
+            .setSaveConsumer(v -> setPosCoord(v, 'z', false, false, true))
+            .build());
+
+        // Repeat count
+        craft.addEntry(eb.startIntSlider(
+            Component.translatable("option.client-tools.ccraft.count"),
+            CcraftState.getRepeatCount(), -1, 9999)
+            .setDefaultValue(1)
+            .setTooltip(Component.translatable("tooltip.client-tools.ccraft.count"))
+            .setSaveConsumer(CcraftState::setRepeatCount)
             .build());
 
         // ---- Sweep ----
@@ -130,6 +239,34 @@ public final class ClientToolsConfigScreen {
             .setSaveConsumer(SweepState::setShowNearestDirection)
             .build());
 
+        // ---- Timer ----
+        ConfigCategory timer = builder.getOrCreateCategory(
+            Component.translatable("category.client-tools.timer"));
+
+        int timerCount = TimerManager.getActiveCount();
+        timer.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.timer_count", timerCount))
+            .build());
+
+        List<TimerInstance> activeTimers = TimerManager.getTimers();
+        if (activeTimers.isEmpty()) {
+            timer.addEntry(eb.startTextDescription(
+                Component.translatable("text.client-tools.config.timer_empty"))
+                .build());
+        } else {
+            for (TimerInstance t : activeTimers) {
+                String timesDesc = t.isInfinite()
+                    ? Component.translatable("text.client-tools.config.timer_infinite").getString()
+                    : t.getRemainingTimes() + "/" + t.getTotalTimes();
+                // Parse the interval using CtimerCommand's formatter — reuse format logic inline
+                String intervalStr = formatTimerInterval(t.getIntervalTicks());
+                timer.addEntry(eb.startTextDescription(
+                    Component.translatable("text.client-tools.config.timer_entry",
+                        t.getId(), t.getCommand(), intervalStr, timesDesc))
+                    .build());
+            }
+        }
+
         // ---- Status ----
         ConfigCategory status = builder.getOrCreateCategory(
             Component.translatable("category.client-tools.status"));
@@ -144,12 +281,6 @@ public final class ClientToolsConfigScreen {
         String craftStatus = getCraftStatusText();
         status.addEntry(eb.startTextDescription(
             Component.translatable("text.client-tools.config.craft_status", craftStatus))
-            .build());
-
-        // Timer count
-        int timerCount = TimerManager.getTimers().size();
-        status.addEntry(eb.startTextDescription(
-            Component.translatable("text.client-tools.config.timer_count", timerCount))
             .build());
 
         return builder.build();
@@ -180,6 +311,109 @@ public final class ClientToolsConfigScreen {
         }
     }
 
+    // ---- Craft helpers ----
+
+    /** Convert an Item to its registry ID string, or empty string if null. */
+    private static String getCraftItemId(Item item) {
+        if (item == null) return "";
+        ResourceLocation id = BuiltInRegistries.ITEM.getKey(item);
+        return id != null ? id.toString() : "";
+    }
+
+    /** Parse a registry ID string and set it as product (isProduct=true) or source (isProduct=false). */
+    private static void setCraftItem(String value, boolean isProduct) {
+        value = value.trim();
+        if (value.isEmpty()) {
+            if (isProduct) {
+                CcraftState.clearProductItem();
+            } else {
+                CcraftState.clearSourceItem();
+            }
+            return;
+        }
+        ResourceLocation id = ResourceLocation.tryParse(value);
+        if (id == null) return; // invalid ID, ignore
+        Item item = BuiltInRegistries.ITEM.get(id);
+        if (item == null) return; // unknown item, ignore
+        if (isProduct) {
+            CcraftState.setProductItem(item);
+        } else {
+            CcraftState.setSourceItem(item);
+        }
+    }
+
+    /** Get a single coordinate from a BlockPos, or 0 if pos is null. */
+    private static int getPosCoord(BlockPos pos, char axis) {
+        if (pos == null) return 0;
+        return switch (axis) {
+            case 'x' -> pos.getX();
+            case 'y' -> pos.getY();
+            case 'z' -> pos.getZ();
+            default -> 0;
+        };
+    }
+
+    /**
+     * Set a single coordinate of a BlockPos, reading the other two from the current value.
+     * @param isStation true = station pos, false = not station
+     * @param isInput   true = input pos
+     * @param isOutput  true = output pos
+     */
+    private static void setPosCoord(int value, char axis, boolean isStation, boolean isInput, boolean isOutput) {
+        BlockPos current;
+        if (isStation) {
+            current = CcraftState.getStationPos();
+        } else if (isInput) {
+            current = CcraftState.getInputPos();
+        } else {
+            current = CcraftState.getOutputPos();
+        }
+
+        int x = current != null ? current.getX() : 0;
+        int y = current != null ? current.getY() : 0;
+        int z = current != null ? current.getZ() : 0;
+
+        switch (axis) {
+            case 'x' -> x = value;
+            case 'y' -> y = value;
+            case 'z' -> z = value;
+        }
+
+        BlockPos newPos = new BlockPos(x, y, z);
+        if (isStation) {
+            CcraftState.setStationPos(newPos);
+        } else if (isInput) {
+            CcraftState.setInputPos(newPos);
+        } else {
+            CcraftState.setOutputPos(newPos);
+        }
+    }
+
+    // ---- Timer format helper ----
+
+    /** Format tick count to a readable duration string (reuses same logic as CtimerCommand). */
+    private static String formatTimerInterval(int ticks) {
+        if (ticks <= 0) return "0t";
+        if (ticks < 20) return ticks + "t";
+        long totalSeconds = ticks / 20;
+        long hours = totalSeconds / 3600;
+        long minutes = (totalSeconds % 3600) / 60;
+        long seconds = totalSeconds % 60;
+        StringBuilder sb = new StringBuilder();
+        if (hours > 0) {
+            sb.append(hours).append("h");
+            if (minutes > 0 || seconds > 0) sb.append(" ");
+        }
+        if (minutes > 0) {
+            sb.append(minutes).append("m");
+            if (seconds > 0) sb.append(" ");
+        }
+        if (seconds > 0 || sb.length() == 0) {
+            sb.append(seconds).append("s");
+        }
+        return sb.toString();
+    }
+
     // ---- Status helpers ----
 
     private static String getSweepStatusText() {
@@ -203,6 +437,8 @@ public final class ClientToolsConfigScreen {
         CraftingExecutor executor = CraftingExecutor.getInstance();
         if (executor.isRunning()) {
             return "§aRunning";
+        } else if (executor.isDone()) {
+            return "§aDone";
         } else {
             return "§7Idle";
         }

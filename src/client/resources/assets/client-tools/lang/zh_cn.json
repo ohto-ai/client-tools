@@ -218,14 +218,37 @@
   "title.client-tools.config": "Client Tools 设置",
 
   "category.client-tools.flight": "飞行",
+  "category.client-tools.craft": "合成",
+  "category.client-tools.timer": "定时器",
   "category.client-tools.sweep": "扫掠",
   "category.client-tools.display": "显示",
   "category.client-tools.status": "状态",
 
   "text.client-tools.config.flight_description": "§7通过此开关控制飞行状态，或使用 §e/cfly§7 命令。",
+  "text.client-tools.config.craft_description": "§7配置自动化合成参数。功能等同于 §e/ccraft§7 子命令。",
+  "text.client-tools.config.station_label": "§7--- 工作台位置 ---",
+  "text.client-tools.config.input_label": "§7--- 输入箱 ---",
+  "text.client-tools.config.output_label": "§7--- 输出箱 ---",
+
   "option.client-tools.cfly.enabled": "飞行中",
   "option.client-tools.cfly.autojump": "自动跳跃",
   "tooltip.client-tools.cfly.autojump": "§7开启后，/cfly 和 /cfly enable 会同时让玩家跳起。",
+
+  "option.client-tools.ccraft.product": "目标物品",
+  "tooltip.client-tools.ccraft.product": "§7要合成的目标物品，例如 §eminecraft:diamond_block§7。必需项。",
+  "option.client-tools.ccraft.source": "源物品",
+  "tooltip.client-tools.ccraft.source": "§7起始合成材料（可选）。留空则使用自动检测模式。",
+  "option.client-tools.ccraft.station_x": "工作台 X",
+  "option.client-tools.ccraft.station_y": "工作台 Y",
+  "option.client-tools.ccraft.station_z": "工作台 Z",
+  "option.client-tools.ccraft.input_x": "输入箱 X",
+  "option.client-tools.ccraft.input_y": "输入箱 Y",
+  "option.client-tools.ccraft.input_z": "输入箱 Z",
+  "option.client-tools.ccraft.output_x": "输出箱 X",
+  "option.client-tools.ccraft.output_y": "输出箱 Y",
+  "option.client-tools.ccraft.output_z": "输出箱 Z",
+  "option.client-tools.ccraft.count": "重复次数",
+  "tooltip.client-tools.ccraft.count": "§7最多合成多少个最终产物。§e-1 §7= 无限（直到材料耗尽）。",
 
   "option.client-tools.sweep.radius": "扫掠半径",
   "tooltip.client-tools.sweep.radius": "§7站点间隔（格，1–64）。",
@@ -240,9 +263,13 @@
   "option.client-tools.sweep.show_layer": "层级强调",
   "option.client-tools.sweep.show_dir": "方向线",
 
+  "text.client-tools.config.timer_count": "活动定时器: %d",
+  "text.client-tools.config.timer_empty": "§7没有活动定时器。使用 §e/ctimer start §7创建一个。",
+  "text.client-tools.config.timer_entry": "§b#%d §f%s §7(每 %s, 剩余 %s)",
+  "text.client-tools.config.timer_infinite": "∞",
+
   "text.client-tools.config.sweep_status": "扫掠: %s",
   "text.client-tools.config.craft_status": "合成: %s",
-  "text.client-tools.config.timer_count": "活动定时器: %d",
 
   "text.client-tools.config.status_running": "§a运行中 (%d/%d)",
   "text.client-tools.config.status_paused": "§e暂停在站点 %d"
