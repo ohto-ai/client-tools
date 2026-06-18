@@ -3,7 +3,9 @@
 [![Development Builds](https://github.com/ohto-ai/client-tools/actions/workflows/build.yml/badge.svg)](https://github.com/ohto-ai/client-tools/actions/workflows/build.yml)
 [![Publish Release](https://github.com/ohto-ai/client-tools/actions/workflows/release.yml/badge.svg?event=release)](https://github.com/ohto-ai/client-tools/actions/workflows/release.yml)
 
-Support Minecraft 1.21~1.21.8 | [Release](https://github.com/ohto-ai/client-tools/releases)
+Support Minecraft 1.21～1.21.8
+
+**[Download on Modrinth](https://modrinth.com/mod/client-tools)** | **[Download on CurseForge](https://www.curseforge.com/minecraft/mc-mods/client-tools)**
 
 **客户端自动化工具集：自动合成、定时调度、快捷聊天、飞行控制、蛇形扫掠 / A collection of client-side automation tools: auto crafting, timed scheduler, quick chat, flight toggle, and snake-pattern area traversal.**
 
@@ -12,6 +14,16 @@ Support Minecraft 1.21~1.21.8 | [Release](https://github.com/ohto-ai/client-tool
 <img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/decb09da-84e7-4769-98fd-bcdb259610b7" />
 
 <img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/74f70c4d-55c5-4713-8bdf-fa5ed3db4862" />
+
+---
+
+## Download
+
+| Platform | Link |
+|----------|------|
+| Modrinth | [modrinth.com/mod/client-tools](https://modrinth.com/mod/client-tools) |
+| CurseForge | [curseforge.com/minecraft/mc-mods/client-tools](https://www.curseforge.com/minecraft/mc-mods/client-tools) |
+| GitHub Releases | [github.com/ohto-ai/client-tools/releases](https://github.com/ohto-ai/client-tools/releases) |
 
 ---
 
@@ -52,9 +64,10 @@ All features run entirely on the client side. No server-side installation is req
 - Auto-detect crafting station and input/output containers from the block you are looking at
 - Smart multi-source material scanning — detects available materials in the input chest and builds an optimal crafting plan
 - Full crafting chain analysis — automatically handles intermediate crafting steps (e.g., planks → sticks → tools)
+- **Legacy source mode** — specify a source item with `/ccraft source <item>` for fixed chain crafting
 - Configurable target count with infinite mode (crafts until materials run out or output is full)
 - **Per-setting clear** — individually clear source, product, station, input, output, or count without resetting everything
-- **Enhanced block highlight (`/ccraft show`)** — customizable duration and per-position colors with tab-completion for named colors (red, green, blue...) and hex values
+- **Enhanced block highlight (`/ccraft show`)** — customizable duration and per-position colors with tab-completion for named colors (red, green, blue...) and hex values; default colors: station green, input blue, output gold
 - Real-time status with contextual hints — shows stop command when running, run command when ready
 - Container timeout and retry handling
 - Real-time progress tracking during execution
@@ -77,12 +90,13 @@ All features run entirely on the client side. No server-side installation is req
 ### `/csweep` — Snake-Pattern Area Traversal
 
 - Select a cuboid area with two corner positions (`pos1` / `pos2`)
-- **Litematica integration** — auto-sync sweep area from Litematica schematic sub-regions; sweep across multiple regions sequentially
+- **Litematica integration** — auto-sync sweep area from Litematica schematic sub-regions (enabled by default); sweep across multiple regions sequentially
 - Snake-pattern path generation with configurable station spacing (based on radius)
 - **Continuous smooth movement** — linear interpolation between stations at constant speed, no stop-and-go
 - **Dynamic cuboid adjustment** — expand or contract the cuboid boundary based on your viewing direction
 - **Does not lock camera** — uses position-only packets, you keep full view control
 - Independent highlight toggles: green outline wireframe, cyan path preview (gray for visited segments)
+- Y-level layer emphasis and nearest-station direction arrows are enabled by default
 - **Pause & resume with full persistence** — progress survives game restarts, pause acts as toggle
 - **Auto-save on disconnect** — sweep progress is automatically saved when you disconnect, with a reconnect reminder
 - **Smooth approach** — when resuming far from the path, flies smoothly to the target instead of teleporting
@@ -91,6 +105,7 @@ All features run entirely on the client side. No server-side installation is req
 - **Multi-region layer emphasis** — thickens the current sub-region outline, dims inactive regions for clarity
 - **Sub-region skip** — skip to the next Litematica sub-region with `/csweep next`
 - Live speed adjustment — change flight speed mid-operation
+- Progress bar with ETA in status display
 - Designed to work alongside projection printers and auto-mining mods
 
 ### `/cchat` — Quick Chat Sender
@@ -126,6 +141,9 @@ All features run entirely on the client side. No server-side installation is req
 /ccraft output                               — Set output chest (look at it)
 /ccraft station                              — Set crafting table (look at it, or auto-detected)
 
+--- Legacy source mode (fixed chain) ---
+/ccraft source minecraft:diamond             — Set the source material to craft from
+
 --- Target count ---
 /ccraft count 64                             — Craft 64 products
 /ccraft count infinite                       — Craft until materials run out or output is full
@@ -136,7 +154,7 @@ All features run entirely on the client side. No server-side installation is req
 /ccraft status                               — Check runtime progress and configuration
 
 --- Block highlight ---
-/ccraft show                                 — Highlight positions for 3s (default colors)
+/ccraft show                                 — Highlight positions for 3s (default colors: station green, input blue, output gold)
 /ccraft show 10s                             — Highlight for 10 seconds
 /ccraft show 5s red blue gold                — 5s, custom colors (station/input/output)
 /ccraft show 30s FF5555 55FF55 FFAA00        — 30s, hex colors
@@ -154,7 +172,7 @@ All features run entirely on the client side. No server-side installation is req
 
 **Duration formats:** `3s` (seconds), `10t` (ticks), `1m` (minutes), `500ms` (milliseconds)
 
-**Color formats:** named (`red`, `green`, `blue`, `gold`, `yellow`, `cyan`, `magenta`, `white`, `orange`, `purple`, `pink`, `lime`, `aqua`, `navy`, `teal`, `brown`, `gray`, `black`) or hex (`FF5555`, `#FF5555`, `0xFF5555`)
+**Color formats:** named (`red`, `green`, `blue`, `gold`, `yellow`, `cyan`, `magenta`, `white`, `orange`, `purple`, `pink`, `lime`, `aqua`, `navy`, `teal`, `brown`, `gray`, `grey`, `black`) or hex (`FF5555`, `#FF5555`, `0xFF5555`)
 
 Use **Tab** to auto-complete durations and colors in the `show` command.
 
@@ -170,7 +188,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 
 **Syntax:** `/ctimer start <count|infinite> interval <duration> <command>`
-**Duration formats:** `1s`, `5m`, `1h`, `500ms`, `20t` (ticks)
+**Duration formats:** `1s`, `5m`, `1h`, `500ms`, `20t` (ticks), plain number = ticks
 
 ### `/cfly` Quick Start
 
@@ -190,6 +208,10 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep radius 5          — Set station spacing radius (default 4, range 1–64)
 /csweep speed 15          — Set flight speed in blocks/sec (default 10, range 0.5–100)
 
+--- Check current values ---
+/csweep radius            — Show current radius
+/csweep speed             — Show current speed
+
 --- Adjust cuboid ---
 /csweep expand 5          — Expand the cuboid 5 blocks along the face you're looking at
 /csweep contract 3        — Shrink the cuboid 3 blocks along the face you're looking at
@@ -198,11 +220,11 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /csweep show              — Check current show settings
 /csweep show outline      — Toggle green cuboid wireframe
 /csweep show path         — Toggle cyan snake-path preview (works before starting!)
-/csweep show layer        — Toggle Y-level emphasis (thick current layer, dim others)
-/csweep show dir          — Toggle path direction arrows at nearest station
+/csweep show layer        — Toggle Y-level emphasis (thick current layer, dim others; on by default)
+/csweep show dir          — Toggle path direction arrows at nearest station (on by default)
 
 --- Litematica Integration ---
-/csweep litematica on     — Sync sweep area with Litematica schematic sub-regions
+/csweep litematica on     — Sync sweep area with Litematica schematic sub-regions (enabled by default)
 /csweep litematica off    — Use manual positions instead
 /csweep litematica sync   — Force re-sync with Litematica placement (refreshes regions)
 /csweep litematica        — Show Litematica sync status and sub-region list
@@ -227,9 +249,9 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Smooth movement:** The sweep no longer stops at each station. The player moves continuously along the path at constant speed with linear interpolation between waypoints — faster and more natural.
 
-**Litematica integration:** Enable with `/csweep litematica on` to automatically sync the sweep area with your active Litematica schematic's sub-regions. Each sub-region is swept sequentially. Use `/csweep litematica` to view detected regions and their coordinates. Requires Litematica to be installed. Setting manual positions auto-disables the sync.
+**Litematica integration:** Litematica sync is enabled by default. If Litematica is installed and a schematic is loaded, the sweep area automatically syncs to the schematic's sub-regions. Each sub-region is swept sequentially. Setting manual `pos1`/`pos2` auto-disables the sync. Use `/csweep litematica` to view detected regions and their coordinates.
 
-**Mid-sweep recovery & real-time tracking:** `/csweep nearest` now toggles real-time nearest station tracking. When enabled, the nearest station updates as you move, with path direction arrows showing the sweep direction at that station. Move around to find the best starting point, then `/csweep start` to begin from there. The executor flies you smoothly to the target station — no instant teleport. `/csweep nearest` again to turn off tracking. If a paused state exists, using `/csweep nearest` clears it (you're choosing a new start point).
+**Mid-sweep recovery & real-time tracking:** `/csweep nearest` toggles real-time nearest station tracking. When enabled, the nearest station updates as you move, with path direction arrows showing the sweep direction at that station. Move around to find the best starting point, then `/csweep start` to begin from there. The executor flies you smoothly to the target station — no instant teleport. `/csweep nearest` again to turn off tracking. If a paused state exists, using `/csweep nearest` clears it (you're choosing a new start point).
 
 ### `/cchat` Quick Start
 
@@ -242,7 +264,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 --- Editing ---
 /csequence new daily           — Create an empty daily.mcfunction and show its file path
-/csequence edit daily          — Show daily.mcfunction file path (click to copy)
+/csequence edit daily          — Show daily.mcfunction file path (click to copy; creates if missing)
 /csequence folder              — Show sequences folder path (click to copy)
 /csequence list                — List all saved sequences
 /csequence delete daily        — Delete daily.mcfunction
@@ -260,7 +282,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **mcfunction format:** Standard Minecraft function syntax — one command per line, `#` for comments, blank lines ignored.
 
-**Nested sequences:** Use `/csequence run <name>` inside a sequence file to call another sequence. The parent pauses, the child runs to completion, then the parent resumes. Cycle detection prevents infinite recursion.
+**Nested sequences:** Use `/csequence run <name>` inside a sequence file to call another sequence. The parent pauses, the child runs to completion, then the parent resumes. Cycle detection prevents infinite recursion (max 10 levels deep).
 
 **File paths:** File paths are shown as clickable text in chat — click to copy the path, then paste into your file manager or editor to open the file directly. This approach ensures CurseForge compliance by not launching external programs.
 
@@ -287,7 +309,7 @@ Output JAR: `build/libs/client-tools-*.jar`
 
 ## Dependencies
 
-- Minecraft 1.21~1.21.8
+- Minecraft 1.21～1.21.8
 - Fabric Loader >= 0.16.10
 - Fabric API
 - Java >= 21
