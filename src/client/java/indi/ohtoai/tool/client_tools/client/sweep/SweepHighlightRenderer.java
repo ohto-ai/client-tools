@@ -232,8 +232,16 @@ public class SweepHighlightRenderer {
     // --- Cuboid wireframe ---
 
     /**
+     * Maximum length (in world-space units) of a single wireframe line segment.
+     * Edges longer than this are subdivided to avoid rendering artifacts on
+     * large areas (e.g. void perimeters spanning hundreds of blocks).
+     */
+    private static final float MAX_EDGE_SEGMENT = 64.0f;
+
+    /**
      * Renders a cuboid wireframe with explicit bounds.
      * Coordinates are block-space (min inclusive, max inclusive).
+     * Long edges are subdivided to avoid GPU line-clipping on huge areas.
      */
     private static void renderCuboidWireframe(PoseStack poseStack, Vec3 camPos,
                                                int minX, int minY, int minZ,
@@ -259,20 +267,20 @@ public class SweepHighlightRenderer {
         BufferBuilder builder = tesselator.begin(VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
 
         // Bottom face
-        line(builder, matrix, x1, y1, z1, x2, y1, z1, r, g, b, a);
-        line(builder, matrix, x2, y1, z1, x2, y1, z2, r, g, b, a);
-        line(builder, matrix, x2, y1, z2, x1, y1, z2, r, g, b, a);
-        line(builder, matrix, x1, y1, z2, x1, y1, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y1, z1, x2, y1, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y1, z1, x2, y1, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y1, z2, x1, y1, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y1, z2, x1, y1, z1, r, g, b, a);
         // Top face
-        line(builder, matrix, x1, y2, z1, x2, y2, z1, r, g, b, a);
-        line(builder, matrix, x2, y2, z1, x2, y2, z2, r, g, b, a);
-        line(builder, matrix, x2, y2, z2, x1, y2, z2, r, g, b, a);
-        line(builder, matrix, x1, y2, z2, x1, y2, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y2, z1, x2, y2, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y2, z1, x2, y2, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y2, z2, x1, y2, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y2, z2, x1, y2, z1, r, g, b, a);
         // Vertical edges
-        line(builder, matrix, x1, y1, z1, x1, y2, z1, r, g, b, a);
-        line(builder, matrix, x2, y1, z1, x2, y2, z1, r, g, b, a);
-        line(builder, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
-        line(builder, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y1, z1, x1, y2, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y1, z1, x2, y2, z1, r, g, b, a);
+        subdividedLine(builder, matrix, x2, y1, z2, x2, y2, z2, r, g, b, a);
+        subdividedLine(builder, matrix, x1, y1, z2, x1, y2, z2, r, g, b, a);
 
         safeDraw(builder);
         RenderSystem.enableDepthTest();
@@ -683,7 +691,46 @@ public class SweepHighlightRenderer {
         poseStack.popPose();
     }
 
-    // --- Line helper ---
+    // --- Line helpers ---
+
+    /**
+     * Draws a line from (x1,y1,z1) to (x2,y2,z2), subdivided into segments
+     * no longer than {@link #MAX_EDGE_SEGMENT} blocks.  This prevents GPU
+     * artifacts (e.g. clipping or single-line rendering) on very large areas
+     * such as void perimeters where a single edge can span 500+ blocks.
+     */
+    private static void subdividedLine(BufferBuilder builder, Matrix4f matrix,
+                                        float x1, float y1, float z1,
+                                        float x2, float y2, float z2,
+                                        float r, float g, float b, float a) {
+        float dx = x2 - x1;
+        float dy = y2 - y1;
+        float dz = z2 - z1;
+        float len = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+
+        if (len <= MAX_EDGE_SEGMENT) {
+            line(builder, matrix, x1, y1, z1, x2, y2, z2, r, g, b, a);
+            return;
+        }
+
+        int segments = (int) Math.ceil(len / MAX_EDGE_SEGMENT);
+        float stepX = dx / segments;
+        float stepY = dy / segments;
+        float stepZ = dz / segments;
+
+        float cx = x1;
+        float cy = y1;
+        float cz = z1;
+        for (int i = 0; i < segments; i++) {
+            float nx = cx + stepX;
+            float ny = cy + stepY;
+            float nz = cz + stepZ;
+            line(builder, matrix, cx, cy, cz, nx, ny, nz, r, g, b, a);
+            cx = nx;
+            cy = ny;
+            cz = nz;
+        }
+    }
 
     private static void line(BufferBuilder builder, Matrix4f matrix,
                              float x1, float y1, float z1,

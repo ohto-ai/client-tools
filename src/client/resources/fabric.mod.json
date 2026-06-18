@@ -19,6 +19,9 @@
     "entrypoints": {
         "client": [
             "indi.ohtoai.tool.client_tools.client.ClientToolsClient"
+        ],
+        "modmenu": [
+            "indi.ohtoai.tool.client_tools.client.config.ModMenuIntegration"
         ]
     },
     "mixins": [
@@ -32,6 +35,10 @@
         "minecraft": ">=1.21 <=1.21.8",
         "java": ">=21",
         "fabric-api": "*"
+    },
+    "recommends": {
+        "modmenu": "*",
+        "cloth-config": "*"
     },
     "suggests": {
         "litematica": "*"

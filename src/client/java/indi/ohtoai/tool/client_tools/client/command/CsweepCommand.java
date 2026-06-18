@@ -109,13 +109,29 @@ public class CsweepCommand {
                 .then(literal("show")
                     .executes(ctx -> showDisplayStatus(ctx.getSource()))
                     .then(literal("outline")
-                        .executes(ctx -> toggleOutline(ctx.getSource())))
+                        .executes(ctx -> toggleOutline(ctx.getSource()))
+                        .then(literal("on")
+                            .executes(ctx -> setOutline(ctx.getSource(), true)))
+                        .then(literal("off")
+                            .executes(ctx -> setOutline(ctx.getSource(), false))))
                     .then(literal("path")
-                        .executes(ctx -> togglePath(ctx.getSource())))
+                        .executes(ctx -> togglePath(ctx.getSource()))
+                        .then(literal("on")
+                            .executes(ctx -> setPath(ctx.getSource(), true)))
+                        .then(literal("off")
+                            .executes(ctx -> setPath(ctx.getSource(), false))))
                     .then(literal("layer")
-                        .executes(ctx -> toggleLayer(ctx.getSource())))
+                        .executes(ctx -> toggleLayer(ctx.getSource()))
+                        .then(literal("on")
+                            .executes(ctx -> setLayer(ctx.getSource(), true)))
+                        .then(literal("off")
+                            .executes(ctx -> setLayer(ctx.getSource(), false))))
                     .then(literal("dir")
-                        .executes(ctx -> toggleNearestDirection(ctx.getSource()))))
+                        .executes(ctx -> toggleNearestDirection(ctx.getSource()))
+                        .then(literal("on")
+                            .executes(ctx -> setNearestDirection(ctx.getSource(), true)))
+                        .then(literal("off")
+                            .executes(ctx -> setNearestDirection(ctx.getSource(), false)))))
                 // ---- litematica ----
                 .then(literal("litematica")
                     .then(literal("on")
@@ -127,7 +143,11 @@ public class CsweepCommand {
                     .executes(ctx -> showLitematicaStatus(ctx.getSource())))
                 // ---- nearest (toggle real-time nearest station tracking) ----
                 .then(literal("nearest")
-                    .executes(ctx -> toggleNearestTracking(ctx.getSource())))
+                    .executes(ctx -> toggleNearestTracking(ctx.getSource()))
+                    .then(literal("on")
+                        .executes(ctx -> setNearestTracking(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setNearestTracking(ctx.getSource(), false))))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -418,6 +438,11 @@ public class CsweepCommand {
     }
 
     private static int toggleNearestTracking(FabricClientCommandSource source) {
+        SweepExecutor exe = SweepExecutor.getInstance();
+        return setNearestTracking(source, !exe.isNearestTrackingEnabled());
+    }
+
+    private static int setNearestTracking(FabricClientCommandSource source, boolean enabled) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null) {
             source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
@@ -426,7 +451,14 @@ public class CsweepCommand {
 
         SweepExecutor exe = SweepExecutor.getInstance();
 
-        if (exe.isNearestTrackingEnabled()) {
+        if (enabled == exe.isNearestTrackingEnabled()) {
+            // Already in the desired state
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.nearest_already_on" : "client-tools.csweep.nearest_already_off"));
+            return 1;
+        }
+
+        if (!enabled) {
             // Turn OFF tracking
             exe.setNearestTrackingEnabled(false);
             exe.clearNearestStation();
@@ -485,7 +517,15 @@ public class CsweepCommand {
     // ==================== show ====================
 
     private static int toggleOutline(FabricClientCommandSource source) {
-        boolean enabled = !SweepState.isShowOutline();
+        return setOutline(source, !SweepState.isShowOutline());
+    }
+
+    private static int setOutline(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isShowOutline() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.show_outline_already_on" : "client-tools.csweep.show_outline_already_off"));
+            return 1;
+        }
         SweepState.setShowOutline(enabled);
         source.sendFeedback(Component.translatable(
             enabled ? "client-tools.csweep.show_outline_on" : "client-tools.csweep.show_outline_off"));
@@ -493,7 +533,15 @@ public class CsweepCommand {
     }
 
     private static int togglePath(FabricClientCommandSource source) {
-        boolean enabled = !SweepState.isShowPath();
+        return setPath(source, !SweepState.isShowPath());
+    }
+
+    private static int setPath(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isShowPath() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.show_path_already_on" : "client-tools.csweep.show_path_already_off"));
+            return 1;
+        }
         SweepState.setShowPath(enabled);
         source.sendFeedback(Component.translatable(
             enabled ? "client-tools.csweep.show_path_on" : "client-tools.csweep.show_path_off"));
@@ -501,7 +549,15 @@ public class CsweepCommand {
     }
 
     private static int toggleLayer(FabricClientCommandSource source) {
-        boolean enabled = !SweepState.isHighlightCurrentLayer();
+        return setLayer(source, !SweepState.isHighlightCurrentLayer());
+    }
+
+    private static int setLayer(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isHighlightCurrentLayer() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.show_layer_already_on" : "client-tools.csweep.show_layer_already_off"));
+            return 1;
+        }
         SweepState.setHighlightCurrentLayer(enabled);
         source.sendFeedback(Component.translatable(
             enabled ? "client-tools.csweep.show_layer_on" : "client-tools.csweep.show_layer_off"));
@@ -509,7 +565,15 @@ public class CsweepCommand {
     }
 
     private static int toggleNearestDirection(FabricClientCommandSource source) {
-        boolean enabled = !SweepState.isShowNearestDirection();
+        return setNearestDirection(source, !SweepState.isShowNearestDirection());
+    }
+
+    private static int setNearestDirection(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isShowNearestDirection() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.show_dir_already_on" : "client-tools.csweep.show_dir_already_off"));
+            return 1;
+        }
         SweepState.setShowNearestDirection(enabled);
         source.sendFeedback(Component.translatable(
             enabled ? "client-tools.csweep.show_dir_on" : "client-tools.csweep.show_dir_off"));
