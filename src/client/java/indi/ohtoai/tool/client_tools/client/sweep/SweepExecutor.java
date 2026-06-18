@@ -116,6 +116,12 @@ public class SweepExecutor {
     private double cachedDensity = 0.0;
     private static final int DENSITY_SCAN_INTERVAL = 10; // scan every 10 ticks (2 Hz)
 
+    // Movement-block detection (server rejected the position packet)
+    private Vec3 lastActualPosition = null;
+    private int blockedTicks = 0;
+    private static final int BLOCKED_TICK_THRESHOLD = 3;   // consecutive blocked ticks to trigger
+    private static final double MOVE_PROGRESS_RATIO = 0.3;  // actual/expected ratio below which = blocked
+
     // --- Public API ---
 
     public void start() {
@@ -804,12 +810,12 @@ public class SweepExecutor {
 
     /**
      * Computes the effective movement speed for the current tick.
-     * When auto speed is enabled, interpolates between min and max speed
-     * based on cached block density ahead.  Otherwise returns the base speed.
-     *
-     * <p>Collision detection acts as an emergency brake: if the player is
-     * currently stuck inside a solid block, speed drops to the minimum
-     * immediately regardless of density.
+     * When auto speed is enabled, uses a three-tier regulation system:
+     * <ol>
+     *   <li><b>Emergency brake</b> — player body inside a solid block → min speed</li>
+     *   <li><b>Movement blockage</b> — server rejecting position packets → min speed</li>
+     *   <li><b>Density scan</b> — block density ahead → smooth interpolation</li>
+     * </ol>
      */
     private double getEffectiveSpeed(Vec3 playerPos, Vec3 direction) {
         if (!SweepState.isAutoSpeed()) {
@@ -821,34 +827,68 @@ public class SweepExecutor {
             return minSpeed;
         }
 
-        // Emergency brake: if the player is stuck in a block, drop to min speed
         Minecraft client = Minecraft.getInstance();
+
+        // Tier 1: player body embedded in a solid block
         if (checkPlayerStuck(client)) {
+            blockedTicks = BLOCKED_TICK_THRESHOLD; // also mark as blocked
             return minSpeed;
         }
 
-        // Periodic density scan
+        // Tier 2: server rejected our movement — player isn't actually advancing
+        if (checkMovementBlocked(client)) {
+            return minSpeed;
+        }
+
+        // Tier 3: predictive density scan ahead
         densityScanTickCounter++;
         if (densityScanTickCounter >= DENSITY_SCAN_INTERVAL && direction != null) {
             densityScanTickCounter = 0;
             cachedDensity = computeBlockDensity(playerPos, direction);
         }
 
-        // Linear interpolation: density=0 → maxSpeed, density=1 → minSpeed
         return maxSpeed - cachedDensity * (maxSpeed - minSpeed);
     }
 
     /**
-     * Checks whether the player's hitbox is currently overlapping any
-     * solid block.  Used as an emergency brake for adaptive speed — if
-     * the player is inside a block, the sweep is moving too fast.
+     * Checks whether the player is actually making progress along the path.
+     * Compares the actual position delta between ticks against the expected
+     * movement speed.  If the player barely moved for several consecutive
+     * ticks, the server is rejecting our position packets — we're blocked.
      *
-     * @return true if the player is stuck inside at least one solid block
+     * @return true if the player is blocked and speed should drop to minimum
+     */
+    private boolean checkMovementBlocked(Minecraft client) {
+        if (client.player == null) return false;
+
+        Vec3 currentPos = client.player.position();
+        if (lastActualPosition == null) {
+            lastActualPosition = currentPos;
+            blockedTicks = 0;
+            return false;
+        }
+
+        double actuallyMoved = currentPos.distanceTo(lastActualPosition);
+        double expectedStep = SweepState.getSpeed() / 20.0;
+        lastActualPosition = currentPos;
+
+        // Player moved less than 30% of the expected distance → blocked this tick
+        if (actuallyMoved < expectedStep * MOVE_PROGRESS_RATIO && expectedStep > 0.05) {
+            blockedTicks++;
+        } else {
+            blockedTicks = Math.max(0, blockedTicks - 1);
+        }
+
+        return blockedTicks >= BLOCKED_TICK_THRESHOLD;
+    }
+
+    /**
+     * Checks whether the player's body is currently overlapping any
+     * solid block.  Used as an emergency brake — immediate drop to min speed.
      */
     private boolean checkPlayerStuck(Minecraft client) {
         if (client.player == null || client.level == null) return false;
 
-        // Check the 3 key body blocks: feet, waist, head
         Vec3 pos = client.player.position();
         double h = client.player.getBbHeight();
         int step = Math.max(1, (int) (h / 3));
@@ -1059,6 +1099,8 @@ public class SweepExecutor {
         approachTarget = null;
         approachDistance = 0.0;
         approachTraveled = 0.0;
+        lastActualPosition = null;
+        blockedTicks = 0;
     }
 
     // --- Shared snake-path algorithm ---
