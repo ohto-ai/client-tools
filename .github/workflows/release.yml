@@ -10,28 +10,21 @@ jobs:
     outputs:
       release-type: ${{ steps.type.outputs.release-type }}
       mod-version: ${{ steps.properties.outputs.mod_version }}
-      minecraft-version: ${{ steps.properties.outputs.minecraft_version }}
-      curse-versions: ${{ steps.properties.outputs.release-curse-versions }}
-      curse-display: ${{ steps.properties.outputs.release-curse-display }}
     steps:
       - uses: actions/checkout@v4
       - name: Determine release type
         id: type
         run: |
-          if "${{ github.event.release.prerelease }}"; then
+          if [ "${{ github.event.release.prerelease }}" = "true" ]; then
             echo "release-type=beta" >> $GITHUB_OUTPUT
           else
             echo "release-type=release" >> $GITHUB_OUTPUT
           fi
-      - name: Read relevant fields from gradle.properties
+      - name: Read mod_version from gradle.properties
         id: properties
         run: |
-          path='./gradle.properties'
-          for property in mod_version minecraft_version release-curse-versions release-curse-display
-          do
-            result=$(sed -n "/^[[:space:]]*$property[[:space:]]*=[[:space:]]*/s/^[[:space:]]*$property[[:space:]]*=[[:space:]]*//p" "$path")
-            echo "$property=$result" >> $GITHUB_OUTPUT
-          done
+          result=$(sed -n "/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*/s/^[[:space:]]*mod_version[[:space:]]*=[[:space:]]*//p" ./gradle.properties)
+          echo "mod_version=$result" >> $GITHUB_OUTPUT
       - uses: actions/github-script@v7
         env:
           READ_VERSION: ${{ steps.properties.outputs.mod_version }}
@@ -46,6 +39,7 @@ jobs:
               if (release.name.includes(READ_VERSION))
                 core.setFailed('Version number is the same as a previous release!')
             }
+
   build:
     runs-on: ubuntu-latest
     steps:
@@ -62,12 +56,13 @@ jobs:
           name: Artifacts
           path: build/libs/
 
-  release:
-    needs: build
+  publish:
+    needs: [build, Get-Properties]
     runs-on: ubuntu-latest
     permissions:
       contents: write
     steps:
+      - uses: actions/checkout@v4
       - uses: actions/download-artifact@v4
         with:
           name: Artifacts
@@ -76,38 +71,24 @@ jobs:
         id: findjar
         run: |
           output="$(find release-artifacts/ ! -name "*-dev.jar" ! -name "*-sources.jar" -type f -printf "%f\n")"
-          echo "jarname=$output"
           echo "jarpath=release-artifacts/$output" >> $GITHUB_OUTPUT
-      - uses: softprops/action-gh-release@v2
+      - uses: Kir-Antipov/mc-publish@v3
         with:
-          files: ${{ steps.findjar.outputs.jarpath }}
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Platform tokens — publishes to all three simultaneously
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          modrinth-token: ${{ secrets.MODRINTH_TOKEN }}
+          curseforge-token: ${{ secrets.CURSEFORGE_TOKEN }}
 
-  publish:
-    needs: [build, Get-Properties]
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          name: Artifacts
-          path: ./release-artifacts
-      - name: Find correct JAR
-        id: findjar
-        run: |
-          output="$(find release-artifacts/ ! -name "*-dev.jar" ! -name "*-sources.jar" -type f -printf "%f\n")"
-          echo "jarname=$output"
-          echo "jarpath=release-artifacts/$output" >> $GITHUB_OUTPUT
-      - name: "Upload to CurseForge"
-        uses: itsmeow/curseforge-upload@v3
-        with:
-          file_path: ${{ steps.findjar.outputs.jarpath }}
-          game_endpoint: "minecraft"
-          relations: "fabric-api:requiredDependency"
-          game_versions: "${{ needs.Get-Properties.outputs.curse-versions }},Java 21,Fabric,Client"
-          project_id: 1575410
-          token: "${{ secrets.CF_API_TOKEN }}"
-          changelog_type: markdown
+          files-primary: ${{ steps.findjar.outputs.jarpath }}
+
+          name: ClientTools v${{ needs.Get-Properties.outputs.mod-version }}
+          version: ${{ needs.Get-Properties.outputs.mod-version }}
+          version-type: ${{ needs.Get-Properties.outputs.release-type }}
+
           changelog: ${{ github.event.release.body }}
-          display_name: ClientTools v${{ needs.Get-Properties.outputs.mod-version }} for ${{ needs.Get-Properties.outputs.curse-display }}
-          release_type: ${{ needs.Get-Properties.outputs.release-type }}
+
+          loaders: fabric
+          game-versions: ">=1.21 <=1.21.8"
+
+          # CurseForge and Modrinth project IDs are auto-read from fabric.mod.json → custom.mc-publish
+          # Dependencies (fabric-api, litematica) are auto-read from fabric.mod.json
