@@ -89,6 +89,9 @@ jobs:
 
           loaders: fabric
           game-versions: ">=1.21 <=1.21.8"
+          java: Java 21
 
           # CurseForge and Modrinth project IDs are auto-read from fabric.mod.json → custom.mc-publish
           # Dependencies (fabric-api, litematica) are auto-read from fabric.mod.json
+          # NOTE: "Client" environment tag on CurseForge cannot be set via mc-publish — it doesn't expose
+          # this field to the CurseForge API. Set it manually in CurseForge project settings if needed.
