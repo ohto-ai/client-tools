@@ -209,6 +209,22 @@ public final class ClientToolsConfigScreen {
             .setSaveConsumer(SweepState::setAvoidWater)
             .build());
 
+        sweep.addEntry(eb.startBooleanToggle(
+            Component.translatable("option.client-tools.sweep.blockdetect"),
+            SweepState.isBlockageDetection())
+            .setDefaultValue(true)
+            .setTooltip(Component.translatable("tooltip.client-tools.sweep.blockdetect"))
+            .setSaveConsumer(SweepState::setBlockageDetection)
+            .build());
+
+        sweep.addEntry(eb.startBooleanToggle(
+            Component.translatable("option.client-tools.sweep.blockdetect_wait"),
+            SweepState.isBlockageStop())
+            .setDefaultValue(false)
+            .setTooltip(Component.translatable("tooltip.client-tools.sweep.blockdetect_wait"))
+            .setSaveConsumer(SweepState::setBlockageStop)
+            .build());
+
         sweep.addEntry(eb.startDoubleField(
             Component.translatable("option.client-tools.sweep.maxspeed"),
             SweepState.getMaxSpeed())

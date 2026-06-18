@@ -38,6 +38,8 @@ public class SweepState {
     private static boolean autoSpeed = false;
     private static double maxSpeed = 30.0;
     private static boolean avoidWater = true;
+    private static boolean blockageDetection = true;
+    private static boolean blockageStop = false;
     private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -61,6 +63,8 @@ public class SweepState {
         Boolean autoSpeed;      // boxed so missing (old config) defaults to false
         Double maxSpeed;        // boxed so missing (old config) defaults to 30.0
         Boolean avoidWater;     // boxed so missing (old config) defaults to true
+        Boolean blockageDetection; // boxed so missing (old config) defaults to true
+        Boolean blockageStop;      // boxed so missing (old config) defaults to false
     }
 
     @SuppressWarnings("unused")
@@ -116,6 +120,8 @@ public class SweepState {
             autoSpeed = false;
             maxSpeed = 30.0;
             avoidWater = true;
+            blockageDetection = true;
+            blockageStop = false;
             invalidateCache();
             load();
             loaded = true;
@@ -140,6 +146,8 @@ public class SweepState {
     public static boolean isAutoSpeed() { ensureLoaded(); return autoSpeed; }
     public static double getMaxSpeed() { ensureLoaded(); return maxSpeed; }
     public static boolean isAvoidWater() { ensureLoaded(); return avoidWater; }
+    public static boolean isBlockageDetection() { ensureLoaded(); return blockageDetection; }
+    public static boolean isBlockageStop() { ensureLoaded(); return blockageStop; }
     public static int getAreaVersion() { ensureLoaded(); return areaVersion; }
 
     /**
@@ -226,6 +234,8 @@ public class SweepState {
     public static void setAutoSpeed(boolean v) { ensureLoaded(); autoSpeed = v; save(); }
     public static void setMaxSpeed(double s) { ensureLoaded(); maxSpeed = Math.max(0.5, Math.min(100.0, s)); save(); }
     public static void setAvoidWater(boolean v) { ensureLoaded(); avoidWater = v; save(); }
+    public static void setBlockageDetection(boolean v) { ensureLoaded(); blockageDetection = v; save(); }
+    public static void setBlockageStop(boolean v) { ensureLoaded(); blockageStop = v; save(); }
 
     // --- Pause state (persisted) ---
 
@@ -331,6 +341,8 @@ public class SweepState {
         autoSpeed = false;
         maxSpeed = 30.0;
         avoidWater = true;
+        blockageDetection = true;
+        blockageStop = false;
         areaVersion++;
         invalidateCache();
         save();
@@ -356,6 +368,8 @@ public class SweepState {
         data.autoSpeed = autoSpeed;
         data.maxSpeed = maxSpeed;
         data.avoidWater = avoidWater;
+        data.blockageDetection = blockageDetection;
+        data.blockageStop = blockageStop;
 
         try {
             Files.createDirectories(path.getParent());
@@ -385,6 +399,8 @@ public class SweepState {
             autoSpeed = data.autoSpeed != null ? data.autoSpeed : false;
             maxSpeed = data.maxSpeed != null ? data.maxSpeed : 30.0;
             avoidWater = data.avoidWater != null ? data.avoidWater : true;
+            blockageDetection = data.blockageDetection != null ? data.blockageDetection : true;
+            blockageStop = data.blockageStop != null ? data.blockageStop : false;
         } catch (IOException ignored) {}
     }
 }

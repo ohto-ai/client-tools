@@ -117,6 +117,12 @@ public class SweepExecutor {
     private static final int DENSITY_SCAN_INTERVAL = 10; // scan every 10 ticks (2 Hz)
     private static final double DENSITY_POWER = 3.0;     // cubic curve: speed stays low until nearly empty
 
+    // Backward hemisphere blockage detection (unmined blocks behind the player)
+    private int blockageScanTickCounter = 0;
+    private int cachedBlockageCount = 0;
+    private static final int BLOCKAGE_SCAN_INTERVAL = 10;    // scan every 10 ticks (2 Hz)
+    private static final int BLOCKAGE_THRESHOLD = 2;         // min unmined blocks to trigger
+
     // Movement-block detection (server rejected the position packet)
     private Vec3 lastActualPosition = null;
     private int blockedTicks = 0;
@@ -814,8 +820,10 @@ public class SweepExecutor {
 
     /**
      * Computes the effective movement speed for the current tick.
-     * When auto speed is enabled, uses a three-tier regulation system:
+     * Regulation tiers (checked in order):
      * <ol>
+     *   <li><b>Backward blockage</b> — unmined blocks behind the player →
+     *       min speed or stop (works independently of auto speed)</li>
      *   <li><b>Emergency brake</b> — player body inside a solid block → min speed</li>
      *   <li><b>Movement blockage</b> — server rejecting position packets → min speed</li>
      *   <li><b>Water penalty</b> — head underwater → min speed (avoids mining speed penalty)</li>
@@ -823,6 +831,25 @@ public class SweepExecutor {
      * </ol>
      */
     private double getEffectiveSpeed(Vec3 playerPos, Vec3 direction) {
+        Minecraft client = Minecraft.getInstance();
+
+        // Tier 0: backward hemisphere blockage — independent of auto speed
+        if (SweepState.isBlockageDetection()) {
+            blockageScanTickCounter++;
+            if (blockageScanTickCounter >= BLOCKAGE_SCAN_INTERVAL && direction != null) {
+                blockageScanTickCounter = 0;
+                cachedBlockageCount = computeBackwardBlockage(playerPos, direction, client);
+            }
+            if (cachedBlockageCount > BLOCKAGE_THRESHOLD) {
+                if (SweepState.isBlockageStop()) {
+                    return 0.0; // stop and wait
+                } else {
+                    // Slow to a crawl: 20% of base speed, floor at 0.5
+                    return Math.max(0.5, SweepState.getSpeed() * 0.2);
+                }
+            }
+        }
+
         if (!SweepState.isAutoSpeed()) {
             return SweepState.getSpeed();
         }
@@ -831,8 +858,6 @@ public class SweepExecutor {
         if (maxSpeed < minSpeed) {
             return minSpeed;
         }
-
-        Minecraft client = Minecraft.getInstance();
 
         // Tier 1: player body embedded in a solid block
         if (checkPlayerStuck(client)) {
@@ -1112,6 +1137,115 @@ public class SweepExecutor {
         return (double) nonAir / total;
     }
 
+    /**
+     * Scans a hemisphere behind the player (opposite to the movement direction)
+     * for blocks that should have been mined but are still present.
+     * Excludes air, liquids, and unbreakable blocks (bedrock, barrier, etc.).
+     *
+     * <p>The hemisphere is defined as:
+     * <ul>
+     *   <li>Center: {@code playerPos}</li>
+     *   <li>Radius: {@code SweepState.getRadius()}</li>
+     *   <li>Flat face: perpendicular to {@code direction} at the player position</li>
+     *   <li>Dome extends in the direction OPPOSITE to movement</li>
+     * </ul>
+     *
+     * <p>Blocks outside the sweep boundary are excluded.  The scan clips
+     * the bounding box to the union of all sub-regions.
+     *
+     * @param playerPos current player position
+     * @param direction unit vector in the movement direction (forward)
+     * @param client    Minecraft client instance
+     * @return count of unmined breakable blocks in the backward hemisphere
+     */
+    private int computeBackwardBlockage(Vec3 playerPos, Vec3 direction, Minecraft client) {
+        if (client.level == null || direction.lengthSqr() < 1e-6) return 0;
+
+        int r = SweepState.getRadius();
+        // Scan radius: use the sweep radius so we cover the same area each station is responsible for
+        double scanRadius = Math.max(r, 2.0);
+
+        // Compute world-aligned bounding box of the backward hemisphere
+        // The hemisphere extends from playerPos in the backward direction up to scanRadius
+        Vec3 backward = direction.scale(-1.0);
+        Vec3 domeCenter = playerPos.add(backward.scale(scanRadius * 0.5));
+        int minX = (int) Math.floor(Math.min(playerPos.x, domeCenter.x) - scanRadius);
+        int maxX = (int) Math.ceil(Math.max(playerPos.x, domeCenter.x) + scanRadius);
+        int minY = (int) Math.floor(Math.min(playerPos.y, domeCenter.y) - scanRadius);
+        int maxY = (int) Math.ceil(Math.max(playerPos.y, domeCenter.y) + scanRadius);
+        int minZ = (int) Math.floor(Math.min(playerPos.z, domeCenter.z) - scanRadius);
+        int maxZ = (int) Math.ceil(Math.max(playerPos.z, domeCenter.z) + scanRadius);
+
+        // Clip to sweep area boundary — blocks outside won't be mined
+        var subRegions = SweepState.resolveSubRegions();
+        if (!subRegions.isEmpty()) {
+            int areaMinX = Integer.MAX_VALUE, areaMaxX = Integer.MIN_VALUE;
+            int areaMinY = Integer.MAX_VALUE, areaMaxY = Integer.MIN_VALUE;
+            int areaMinZ = Integer.MAX_VALUE, areaMaxZ = Integer.MIN_VALUE;
+            for (var box : subRegions) {
+                areaMinX = Math.min(areaMinX, Math.min(box.pos1().getX(), box.pos2().getX()));
+                areaMaxX = Math.max(areaMaxX, Math.max(box.pos1().getX(), box.pos2().getX()));
+                areaMinY = Math.min(areaMinY, Math.min(box.pos1().getY(), box.pos2().getY()));
+                areaMaxY = Math.max(areaMaxY, Math.max(box.pos1().getY(), box.pos2().getY()));
+                areaMinZ = Math.min(areaMinZ, Math.min(box.pos1().getZ(), box.pos2().getZ()));
+                areaMaxZ = Math.max(areaMaxZ, Math.max(box.pos1().getZ(), box.pos2().getZ()));
+            }
+            minX = Math.max(minX, areaMinX);
+            maxX = Math.min(maxX, areaMaxX);
+            minY = Math.max(minY, areaMinY);
+            maxY = Math.min(maxY, areaMaxY);
+            minZ = Math.max(minZ, areaMinZ);
+            maxZ = Math.min(maxZ, areaMaxZ);
+        }
+
+        int unmined = 0;
+        // Adaptive step size: use 1-block steps for small radii, 2 for larger
+        int step = r <= 4 ? 1 : 2;
+
+        for (int x = minX; x <= maxX; x += step) {
+            for (int y = minY; y <= maxY; y += step) {
+                for (int z = minZ; z <= maxZ; z += step) {
+                    Vec3 blockCenter = new Vec3(x + 0.5, y + 0.5, z + 0.5);
+
+                    // Vector from player to block center
+                    Vec3 toBlock = blockCenter.subtract(playerPos);
+                    double dist = toBlock.length();
+
+                    // Must be within scan radius
+                    if (dist > scanRadius) continue;
+
+                    // Must be in the backward hemisphere:
+                    // dot(toBlock, direction) <= 0 means behind the player
+                    // (flat face of hemisphere is perpendicular to direction at player position)
+                    if (toBlock.dot(direction) > 0) continue;
+
+                    BlockPos bp = new BlockPos((int) Math.floor(blockCenter.x),
+                        (int) Math.floor(blockCenter.y),
+                        (int) Math.floor(blockCenter.z));
+                    if (!client.level.isLoaded(bp)) continue;
+
+                    BlockState state = client.level.getBlockState(bp);
+
+                    // Skip air — already mined / empty
+                    if (state.isAir()) continue;
+
+                    // Skip liquids — water, lava, and other fluids can't be "mined"
+                    if (!state.getFluidState().isEmpty()) continue;
+
+                    // Skip unbreakable blocks (bedrock, barrier, command blocks, etc.)
+                    // getDestroySpeed returns -1 for unbreakable blocks
+                    float destroySpeed = state.getDestroySpeed(client.level, bp);
+                    if (destroySpeed < 0) continue;
+
+                    // This block is breakable, non-air, non-liquid, and still present → unmined
+                    unmined++;
+                }
+            }
+        }
+
+        return unmined;
+    }
+
     // --- Multi-region path building ---
 
     /**
@@ -1241,6 +1375,8 @@ public class SweepExecutor {
         approachTraveled = 0.0;
         lastActualPosition = null;
         blockedTicks = 0;
+        blockageScanTickCounter = 0;
+        cachedBlockageCount = 0;
     }
 
     // --- Shared snake-path algorithm ---

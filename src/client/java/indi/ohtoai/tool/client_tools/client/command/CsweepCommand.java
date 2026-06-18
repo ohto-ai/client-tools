@@ -168,6 +168,17 @@ public class CsweepCommand {
                         .executes(ctx -> setAvoidWater(ctx.getSource(), true)))
                     .then(literal("off")
                         .executes(ctx -> setAvoidWater(ctx.getSource(), false))))
+                // ---- blockdetect (backward hemisphere blockage detection) ----
+                .then(literal("blockdetect")
+                    .executes(ctx -> toggleBlockageDetection(ctx.getSource()))
+                    .then(literal("on")
+                        .executes(ctx -> setBlockageDetection(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setBlockageDetection(ctx.getSource(), false)))
+                    .then(literal("wait")
+                        .executes(ctx -> setBlockageStop(ctx.getSource(), true)))
+                    .then(literal("slow")
+                        .executes(ctx -> setBlockageStop(ctx.getSource(), false))))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -550,6 +561,52 @@ public class CsweepCommand {
         return 1;
     }
 
+    // ==================== blockdetect ====================
+
+    private static int toggleBlockageDetection(FabricClientCommandSource source) {
+        return setBlockageDetection(source, !SweepState.isBlockageDetection());
+    }
+
+    private static int setBlockageDetection(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isBlockageDetection() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.blockdetect_already_on" : "client-tools.csweep.blockdetect_already_off"));
+            return 1;
+        }
+        SweepState.setBlockageDetection(enabled);
+        if (enabled) {
+            String mode = SweepState.isBlockageStop()
+                ? Component.translatable("client-tools.csweep.blockdetect_mode_wait").getString()
+                : Component.translatable("client-tools.csweep.blockdetect_mode_slow").getString();
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_on", mode));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_off"));
+        }
+        return 1;
+    }
+
+    private static int setBlockageStop(FabricClientCommandSource source, boolean waitMode) {
+        if (SweepState.isBlockageStop() == waitMode) {
+            String mode = waitMode
+                ? Component.translatable("client-tools.csweep.blockdetect_mode_wait").getString()
+                : Component.translatable("client-tools.csweep.blockdetect_mode_slow").getString();
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_mode_already", mode));
+            return 1;
+        }
+        SweepState.setBlockageStop(waitMode);
+        if (waitMode) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_mode_set_wait"));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_mode_set_slow"));
+        }
+        // Auto-enable blockage detection if setting a mode explicitly
+        if (!SweepState.isBlockageDetection()) {
+            SweepState.setBlockageDetection(true);
+            source.sendFeedback(Component.translatable("client-tools.csweep.blockdetect_auto_on"));
+        }
+        return 1;
+    }
+
     // ==================== radius / speed ====================
 
     private static int setRadius(FabricClientCommandSource source, int blocks) {
@@ -822,6 +879,11 @@ public class CsweepCommand {
         source.sendFeedback(Component.translatable("client-tools.csweep.status_maxspeed", SweepState.getMaxSpeed()));
         source.sendFeedback(Component.translatable("client-tools.csweep.status_autospeed",
             SweepState.isAutoSpeed() ? "§aON" : "§7OFF"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_blockdetect",
+            SweepState.isBlockageDetection() ? "§aON" : "§7OFF",
+            SweepState.isBlockageStop()
+                ? Component.translatable("client-tools.csweep.blockdetect_mode_wait").getString()
+                : Component.translatable("client-tools.csweep.blockdetect_mode_slow").getString()));
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_show",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",
