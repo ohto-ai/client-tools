@@ -893,22 +893,21 @@ public class SweepExecutor {
     }
 
     /**
-     * Adjusts the Y coordinate to keep the player's head above water
-     * when the water is shallow enough that the seabed remains within
-     * mining reach.  Deep water is left unchanged and handled by the
-     * water slowdown instead.
+     * Adjusts the Y coordinate when the target position would put the
+     * player's head in water.  Scans both up and down for the nearest
+     * air pocket and picks the direction with the smallest Y offset.
      *
-     * <p>Skips adjustment when:
-     * <ul>
-     *   <li>Fully submerged (no air within 3 blocks up)</li>
-     *   <li>Water is too deep — raising above surface would put the
-     *       bottom out of mining reach</li>
-     * </ul>
+     * <p>This handles both normal water (air above) and floating water
+     * (air below, from disabled water flow on some servers).
+     *
+     * <p>Either direction also verifies that the adjusted position
+     * stays within mining reach of any solid bottom below the water.
      */
     private Vec3 avoidWater(Minecraft client, Vec3 pos) {
         if (!SweepState.isAutoSpeed() || client.level == null || client.player == null) return pos;
 
-        double eyeY = pos.y + client.player.getEyeHeight();
+        double eyeHeight = client.player.getEyeHeight();
+        double eyeY = pos.y + eyeHeight;
         BlockPos eyePos = new BlockPos(
             (int) Math.floor(pos.x),
             (int) Math.floor(eyeY),
@@ -918,37 +917,54 @@ public class SweepExecutor {
         BlockState eyeState = client.level.getBlockState(eyePos);
         if (!eyeState.getFluidState().is(FluidTags.WATER)) return pos;
 
-        // Scan up for air
-        for (int dy = 1; dy <= 3; dy++) {
-            BlockPos airPos = eyePos.above(dy);
-            BlockState checkState = client.level.getBlockState(airPos);
-            if (checkState.isAir()) {
-                // Found air surface — check if we can still reach the bottom
-                double newY = airPos.getY() + 0.1 - client.player.getEyeHeight();
-                double newEyeY = newY + client.player.getEyeHeight();
+        double bestOffset = Double.MAX_VALUE;
+        Vec3 bestPos = pos;
 
-                // Find the bottom (first non-water, non-air block below the player)
+        // Try both directions: up (normal water) and down (floating water)
+        int[] directions = {1, -1};
+
+        for (int dir : directions) {
+            for (int d = 1; d <= 3; d++) {
+                BlockPos checkPos = eyePos.offset(0, dir * d, 0);
+                BlockState checkState = client.level.getBlockState(checkPos);
+                if (!checkState.isAir()) continue;
+
+                // Found air — compute new foot Y
+                double newY = checkPos.getY()
+                    + (dir > 0 ? 0.1 : -0.1)  // just inside the air pocket
+                    - eyeHeight;
+                double offset = Math.abs(newY - pos.y);
+
+                // Only consider if this is closer to original path
+                if (offset >= bestOffset) continue;
+
+                // Verify reach to bottom
+                double newEyeY = newY + eyeHeight;
                 BlockPos bottomPos = eyePos;
-                for (int d = 0; d <= 10; d++) {
+                boolean hasBottom = false;
+                for (int bd = 0; bd <= 10; bd++) {
                     bottomPos = bottomPos.below();
                     BlockState bs = client.level.getBlockState(bottomPos);
-                    if (bs.isAir()) break; // air pocket — no solid bottom to mine
-                    if (!bs.getFluidState().is(FluidTags.WATER)) break; // solid bottom
+                    if (bs.isAir() && !bs.getFluidState().is(FluidTags.WATER)) break;
+                    if (!bs.getFluidState().is(FluidTags.WATER) && !bs.isAir()) {
+                        hasBottom = true;
+                        break;
+                    }
                 }
 
-                double distToBottom = newEyeY - (bottomPos.getY() + 1.0);
-                double reach = client.player.blockInteractionRange();
-                if (distToBottom > reach) {
-                    // Too deep — adjusted position can't reach the bottom
-                    return pos;
+                if (hasBottom) {
+                    double distToBottom = newEyeY - (bottomPos.getY() + 1.0);
+                    double reach = client.player.blockInteractionRange();
+                    if (distToBottom > reach) continue;
                 }
 
-                return new Vec3(pos.x, newY, pos.z);
+                bestOffset = offset;
+                bestPos = new Vec3(pos.x, newY, pos.z);
+                break; // found air in this direction, move to next direction
             }
         }
 
-        // Fully submerged — keep original position, water slowdown handles it
-        return pos;
+        return bestPos;
     }
 
     /**
@@ -1031,6 +1047,28 @@ public class SweepExecutor {
         int maxY = (int) Math.ceil(Math.max(playerPos.y, scanEnd.y) + r);
         int minZ = (int) Math.floor(Math.min(playerPos.z, scanEnd.z) - r);
         int maxZ = (int) Math.ceil(Math.max(playerPos.z, scanEnd.z) + r);
+
+        // Clip to sweep area boundary — blocks outside won't be mined
+        var subRegions = SweepState.resolveSubRegions();
+        if (!subRegions.isEmpty()) {
+            int areaMinX = Integer.MAX_VALUE, areaMaxX = Integer.MIN_VALUE;
+            int areaMinY = Integer.MAX_VALUE, areaMaxY = Integer.MIN_VALUE;
+            int areaMinZ = Integer.MAX_VALUE, areaMaxZ = Integer.MIN_VALUE;
+            for (var box : subRegions) {
+                areaMinX = Math.min(areaMinX, Math.min(box.pos1().getX(), box.pos2().getX()));
+                areaMaxX = Math.max(areaMaxX, Math.max(box.pos1().getX(), box.pos2().getX()));
+                areaMinY = Math.min(areaMinY, Math.min(box.pos1().getY(), box.pos2().getY()));
+                areaMaxY = Math.max(areaMaxY, Math.max(box.pos1().getY(), box.pos2().getY()));
+                areaMinZ = Math.min(areaMinZ, Math.min(box.pos1().getZ(), box.pos2().getZ()));
+                areaMaxZ = Math.max(areaMaxZ, Math.max(box.pos1().getZ(), box.pos2().getZ()));
+            }
+            minX = Math.max(minX, areaMinX);
+            maxX = Math.min(maxX, areaMaxX);
+            minY = Math.max(minY, areaMinY);
+            maxY = Math.min(maxY, areaMaxY);
+            minZ = Math.max(minZ, areaMinZ);
+            maxZ = Math.min(maxZ, areaMaxZ);
+        }
 
         int nonAir = 0;
         int total = 0;
