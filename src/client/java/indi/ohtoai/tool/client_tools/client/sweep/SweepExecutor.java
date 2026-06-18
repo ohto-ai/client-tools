@@ -7,7 +7,6 @@ import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
-import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -116,6 +115,7 @@ public class SweepExecutor {
     private int densityScanTickCounter = 0;
     private double cachedDensity = 0.0;
     private static final int DENSITY_SCAN_INTERVAL = 10; // scan every 10 ticks (2 Hz)
+    private static final double DENSITY_POWER = 3.0;     // cubic curve: speed stays low until nearly empty
 
     // Movement-block detection (server rejected the position packet)
     private Vec3 lastActualPosition = null;
@@ -404,7 +404,7 @@ public class SweepExecutor {
         bar.append("§a]");
 
         double speed = SweepState.isAutoSpeed()
-            ? (SweepState.getMaxSpeed() - cachedDensity * (SweepState.getMaxSpeed() - SweepState.getSpeed()))
+            ? densityToSpeed(SweepState.getSpeed(), SweepState.getMaxSpeed(), cachedDensity)
             : SweepState.getSpeed();
         double remainingDist = totalAllRegionsLength - completedDist;
         long etaSeconds = speed > 0 ? (long) Math.ceil(remainingDist / speed) : 0;
@@ -858,7 +858,17 @@ public class SweepExecutor {
             cachedDensity = computeBlockDensity(playerPos, direction);
         }
 
-        return maxSpeed - cachedDensity * (maxSpeed - minSpeed);
+        return densityToSpeed(minSpeed, maxSpeed, cachedDensity);
+    }
+
+    /**
+     * Maps block density to speed using a power curve.
+     * {@code (1 - density)^n} — stays near min when density is high,
+     * rises sharply only when density approaches 0 (nearly empty).
+     */
+    private static double densityToSpeed(double min, double max, double density) {
+        double factor = Math.pow(1.0 - density, DENSITY_POWER);
+        return min + factor * (max - min);
     }
 
     /**
