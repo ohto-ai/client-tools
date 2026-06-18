@@ -6,6 +6,7 @@ import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
+import net.minecraft.world.phys.shapes.VoxelShape;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -805,6 +806,10 @@ public class SweepExecutor {
      * Computes the effective movement speed for the current tick.
      * When auto speed is enabled, interpolates between min and max speed
      * based on cached block density ahead.  Otherwise returns the base speed.
+     *
+     * <p>Collision detection acts as an emergency brake: if the player is
+     * currently stuck inside a solid block, speed drops to the minimum
+     * immediately regardless of density.
      */
     private double getEffectiveSpeed(Vec3 playerPos, Vec3 direction) {
         if (!SweepState.isAutoSpeed()) {
@@ -813,6 +818,12 @@ public class SweepExecutor {
         double minSpeed = SweepState.getSpeed();
         double maxSpeed = SweepState.getMaxSpeed();
         if (maxSpeed < minSpeed) {
+            return minSpeed;
+        }
+
+        // Emergency brake: if the player is stuck in a block, drop to min speed
+        Minecraft client = Minecraft.getInstance();
+        if (checkPlayerStuck(client)) {
             return minSpeed;
         }
 
@@ -825,6 +836,35 @@ public class SweepExecutor {
 
         // Linear interpolation: density=0 → maxSpeed, density=1 → minSpeed
         return maxSpeed - cachedDensity * (maxSpeed - minSpeed);
+    }
+
+    /**
+     * Checks whether the player's hitbox is currently overlapping any
+     * solid block.  Used as an emergency brake for adaptive speed — if
+     * the player is inside a block, the sweep is moving too fast.
+     *
+     * @return true if the player is stuck inside at least one solid block
+     */
+    private boolean checkPlayerStuck(Minecraft client) {
+        if (client.player == null || client.level == null) return false;
+
+        // Check the 3 key body blocks: feet, waist, head
+        Vec3 pos = client.player.position();
+        double h = client.player.getBbHeight();
+        int step = Math.max(1, (int) (h / 3));
+
+        for (int yOff = 0; yOff <= (int) h; yOff += step) {
+            BlockPos bp = new BlockPos(
+                (int) Math.floor(pos.x),
+                (int) Math.floor(pos.y + yOff),
+                (int) Math.floor(pos.z));
+            if (!client.level.isLoaded(bp)) continue;
+            BlockState state = client.level.getBlockState(bp);
+            if (!state.isAir() && !state.getCollisionShape(client.level, bp).isEmpty()) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
