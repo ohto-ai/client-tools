@@ -37,6 +37,7 @@ public class SweepState {
     private static boolean syncLitematica = true;
     private static boolean autoSpeed = false;
     private static double maxSpeed = 30.0;
+    private static boolean avoidWater = true;
     private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -59,6 +60,7 @@ public class SweepState {
         Boolean syncLitematica; // boxed so missing (old config) defaults to true
         Boolean autoSpeed;      // boxed so missing (old config) defaults to false
         Double maxSpeed;        // boxed so missing (old config) defaults to 30.0
+        Boolean avoidWater;     // boxed so missing (old config) defaults to true
     }
 
     @SuppressWarnings("unused")
@@ -113,6 +115,7 @@ public class SweepState {
             syncLitematica = true;
             autoSpeed = false;
             maxSpeed = 30.0;
+            avoidWater = true;
             invalidateCache();
             load();
             loaded = true;
@@ -136,6 +139,7 @@ public class SweepState {
     public static boolean isSyncLitematica() { ensureLoaded(); return syncLitematica; }
     public static boolean isAutoSpeed() { ensureLoaded(); return autoSpeed; }
     public static double getMaxSpeed() { ensureLoaded(); return maxSpeed; }
+    public static boolean isAvoidWater() { ensureLoaded(); return avoidWater; }
     public static int getAreaVersion() { ensureLoaded(); return areaVersion; }
 
     /**
@@ -221,6 +225,7 @@ public class SweepState {
     public static void setHighlightCurrentLayer(boolean v) { ensureLoaded(); highlightCurrentLayer = v; save(); }
     public static void setAutoSpeed(boolean v) { ensureLoaded(); autoSpeed = v; save(); }
     public static void setMaxSpeed(double s) { ensureLoaded(); maxSpeed = Math.max(0.5, Math.min(100.0, s)); save(); }
+    public static void setAvoidWater(boolean v) { ensureLoaded(); avoidWater = v; save(); }
 
     // --- Pause state (persisted) ---
 
@@ -325,6 +330,7 @@ public class SweepState {
         syncLitematica = true;
         autoSpeed = false;
         maxSpeed = 30.0;
+        avoidWater = true;
         areaVersion++;
         invalidateCache();
         save();
@@ -349,6 +355,7 @@ public class SweepState {
         data.syncLitematica = syncLitematica;
         data.autoSpeed = autoSpeed;
         data.maxSpeed = maxSpeed;
+        data.avoidWater = avoidWater;
 
         try {
             Files.createDirectories(path.getParent());
@@ -377,6 +384,7 @@ public class SweepState {
             syncLitematica = data.syncLitematica != null ? data.syncLitematica : true;
             autoSpeed = data.autoSpeed != null ? data.autoSpeed : false;
             maxSpeed = data.maxSpeed != null ? data.maxSpeed : 30.0;
+            avoidWater = data.avoidWater != null ? data.avoidWater : true;
         } catch (IOException ignored) {}
     }
 }

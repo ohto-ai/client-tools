@@ -161,6 +161,13 @@ public class CsweepCommand {
                         .executes(ctx -> setAutoSpeed(ctx.getSource(), true)))
                     .then(literal("off")
                         .executes(ctx -> setAutoSpeed(ctx.getSource(), false))))
+                // ---- avoidwater (toggle Y adjustment to stay out of water) ----
+                .then(literal("avoidwater")
+                    .executes(ctx -> toggleAvoidWater(ctx.getSource()))
+                    .then(literal("on")
+                        .executes(ctx -> setAvoidWater(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setAvoidWater(ctx.getSource(), false))))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -522,6 +529,24 @@ public class CsweepCommand {
         } else {
             source.sendFeedback(Component.translatable("client-tools.csweep.autospeed_off"));
         }
+        return 1;
+    }
+
+    // ==================== avoidwater ====================
+
+    private static int toggleAvoidWater(FabricClientCommandSource source) {
+        return setAvoidWater(source, !SweepState.isAvoidWater());
+    }
+
+    private static int setAvoidWater(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isAvoidWater() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.avoidwater_already_on" : "client-tools.csweep.avoidwater_already_off"));
+            return 1;
+        }
+        SweepState.setAvoidWater(enabled);
+        source.sendFeedback(Component.translatable(
+            enabled ? "client-tools.csweep.avoidwater_on" : "client-tools.csweep.avoidwater_off"));
         return 1;
     }
 

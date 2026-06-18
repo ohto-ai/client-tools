@@ -201,6 +201,14 @@ public final class ClientToolsConfigScreen {
             .setSaveConsumer(SweepState::setAutoSpeed)
             .build());
 
+        sweep.addEntry(eb.startBooleanToggle(
+            Component.translatable("option.client-tools.sweep.avoidwater"),
+            SweepState.isAvoidWater())
+            .setDefaultValue(true)
+            .setTooltip(Component.translatable("tooltip.client-tools.sweep.avoidwater"))
+            .setSaveConsumer(SweepState::setAvoidWater)
+            .build());
+
         sweep.addEntry(eb.startDoubleField(
             Component.translatable("option.client-tools.sweep.maxspeed"),
             SweepState.getMaxSpeed())

@@ -904,7 +904,8 @@ public class SweepExecutor {
      * stays within mining reach of any solid bottom below the water.
      */
     private Vec3 avoidWater(Minecraft client, Vec3 pos) {
-        if (!SweepState.isAutoSpeed() || client.level == null || client.player == null) return pos;
+        if (!SweepState.isAutoSpeed() || !SweepState.isAvoidWater()
+            || client.level == null || client.player == null) return pos;
 
         double eyeHeight = client.player.getEyeHeight();
         double eyeY = pos.y + eyeHeight;
