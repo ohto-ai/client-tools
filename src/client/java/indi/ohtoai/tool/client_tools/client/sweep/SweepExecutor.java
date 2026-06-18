@@ -4,6 +4,7 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import net.minecraft.tags.FluidTags;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 import net.minecraft.world.phys.shapes.VoxelShape;
@@ -814,6 +815,7 @@ public class SweepExecutor {
      * <ol>
      *   <li><b>Emergency brake</b> — player body inside a solid block → min speed</li>
      *   <li><b>Movement blockage</b> — server rejecting position packets → min speed</li>
+     *   <li><b>Water penalty</b> — head underwater → min speed (avoids mining speed penalty)</li>
      *   <li><b>Density scan</b> — block density ahead → smooth interpolation</li>
      * </ol>
      */
@@ -840,7 +842,13 @@ public class SweepExecutor {
             return minSpeed;
         }
 
-        // Tier 3: predictive density scan ahead
+        // Tier 3: head in water → 5× mining penalty (25× if also floating)
+        // Slow to min speed so the miner/printer has enough time per block
+        if (checkPlayerInWater(client)) {
+            return minSpeed;
+        }
+
+        // Tier 4: predictive density scan ahead
         densityScanTickCounter++;
         if (densityScanTickCounter >= DENSITY_SCAN_INTERVAL && direction != null) {
             densityScanTickCounter = 0;
@@ -848,6 +856,16 @@ public class SweepExecutor {
         }
 
         return maxSpeed - cachedDensity * (maxSpeed - minSpeed);
+    }
+
+    /**
+     * Detects whether the player's head is submerged in water.
+     * Mining while underwater incurs a severe speed penalty (5×–25×),
+     * so the sweep should slow down to give the mining tool enough time.
+     */
+    private boolean checkPlayerInWater(Minecraft client) {
+        if (client.player == null) return false;
+        return client.player.isEyeInFluid(FluidTags.WATER);
     }
 
     /**
