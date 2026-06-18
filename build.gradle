@@ -40,10 +40,10 @@ dependencies {
 	// Fabric API. This is technically optional, but you probably want it anyway.
 	modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_api_version}"
 
-	// ModMenu — config screen integration
-	modImplementation "com.terraformersmc:modmenu:${project.modmenu_version}"
-	// Cloth Config — auto-generated config screens
-	modApi "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
+	// ModMenu — config screen integration (optional; mod works without it)
+	modCompileOnly "com.terraformersmc:modmenu:${project.modmenu_version}"
+	// Cloth Config — auto-generated config screens (optional; mod works without it)
+	modCompileOnly "me.shedaniel.cloth:cloth-config-fabric:${project.cloth_config_version}"
 }
 
 processResources {
