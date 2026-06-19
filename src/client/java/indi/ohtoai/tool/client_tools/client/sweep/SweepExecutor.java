@@ -5,6 +5,7 @@ import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
 
@@ -824,6 +825,8 @@ public class SweepExecutor {
      * <ol>
      *   <li><b>Backward blockage</b> — unmined blocks behind the player →
      *       min speed or stop (works independently of auto speed)</li>
+     *   <li><b>Cobweb slowdown</b> — player inside cobweb → 25% speed
+     *       (prevents server rubberbanding; works independently of auto speed)</li>
      *   <li><b>Emergency brake</b> — player body inside a solid block → min speed</li>
      *   <li><b>Movement blockage</b> — server rejecting position packets → min speed</li>
      *   <li><b>Water penalty</b> — head underwater → min speed (avoids mining speed penalty)</li>
@@ -848,6 +851,18 @@ public class SweepExecutor {
                     return Math.max(0.5, SweepState.getSpeed() * 0.2);
                 }
             }
+        }
+
+        // Cobweb slowdown: vanilla reduces entity movement in cobwebs to ~25%
+        // horizontally.  If the sweep pushes at full speed, the server rejects
+        // the position and rubberbands the player — slow to match what the
+        // server will actually allow.  Runs independently of auto-speed.
+        if (checkPlayerInCobweb(client)) {
+            double minSpeed = SweepState.getSpeed();
+            double effectiveMax = SweepState.isAutoSpeed()
+                ? Math.max(minSpeed, SweepState.getMaxSpeed())
+                : minSpeed;
+            return Math.max(0.1, effectiveMax * 0.25);
         }
 
         if (!SweepState.isAutoSpeed()) {
@@ -907,13 +922,54 @@ public class SweepExecutor {
     }
 
     /**
+     * Checks whether the player's body overlaps a cobweb block.
+     * Cobwebs slow entity movement to ~25% horizontally (15% vertically)
+     * in vanilla Minecraft.  If the sweep doesn't match this reduced speed,
+     * the server rejects position packets and rubberbands the player.
+     *
+     * <p>This check runs regardless of auto-speed mode, because cobweb
+     * slowdown is a server-side mechanic that affects every entity.
+     */
+    private boolean checkPlayerInCobweb(Minecraft client) {
+        if (client.player == null || client.level == null) return false;
+
+        Vec3 pos = client.player.position();
+        double h = client.player.getBbHeight();
+
+        // Check foot position and mid-body position
+        BlockPos footPos = new BlockPos(
+            (int) Math.floor(pos.x),
+            (int) Math.floor(pos.y),
+            (int) Math.floor(pos.z));
+
+        if (client.level.isLoaded(footPos)
+            && client.level.getBlockState(footPos).is(Blocks.COBWEB)) {
+            return true;
+        }
+
+        BlockPos bodyPos = new BlockPos(
+            (int) Math.floor(pos.x),
+            (int) Math.floor(pos.y + h * 0.5),
+            (int) Math.floor(pos.z));
+
+        if (!bodyPos.equals(footPos) && client.level.isLoaded(bodyPos)
+            && client.level.getBlockState(bodyPos).is(Blocks.COBWEB)) {
+            return true;
+        }
+
+        return false;
+    }
+
+    /**
      * Returns the {@code onGround} flag for movement packets.
-     * When auto speed is on, spoofs {@code true} to eliminate the 5×
-     * floating mining penalty.  Since {@code /cfly} enables flight
-     * permissions, the server won't kick for the inconsistency.
+     * Spoofs {@code true} when auto speed is on, or when the player is in a
+     * cobweb — both cases need to eliminate the 5× floating mining penalty
+     * so auto-mining tools can break blocks at full speed.  Since {@code /cfly}
+     * enables flight permissions, the server won't kick for the inconsistency.
      */
     private boolean getSpoofedOnGround(Minecraft client) {
         if (SweepState.isAutoSpeed()) return true;
+        if (checkPlayerInCobweb(client)) return true;
         return client.player != null && client.player.onGround();
     }
 
