@@ -129,6 +129,7 @@ public class SweepExecutor {
     private int blockedTicks = 0;
     private static final int BLOCKED_TICK_THRESHOLD = 3;   // consecutive blocked ticks to trigger
     private static final double MOVE_PROGRESS_RATIO = 0.3;  // actual/expected ratio below which = blocked
+    private static final double EMERGENCY_SPEED = 0.5;      // speed when stuck/blocked/underwater
 
     // --- Public API ---
 
@@ -707,7 +708,7 @@ public class SweepExecutor {
     private void doApproach(Minecraft client) {
         // Track movement blockage so the approach phase also pauses
         // when the server rejects position packets.
-        checkMovementBlocked(client);
+        boolean movementBlocked = checkMovementBlocked(client);
 
         // Compute direction for density scan
         Vec3 direction = null;
@@ -720,7 +721,9 @@ public class SweepExecutor {
 
         double effectiveSpeed = getEffectiveSpeed(
             approachOrigin != null ? approachOrigin : client.player.position(), direction);
-        double step = effectiveSpeed / 20.0;
+        // When the server rejects movement, hold approachTraveled so we don't
+        // desync from the player's actual position (same as doMove).
+        double step = movementBlocked ? 0.0 : effectiveSpeed / 20.0;
         approachTraveled += step;
 
         if (approachTraveled >= approachDistance) {
@@ -838,10 +841,14 @@ public class SweepExecutor {
      *       min speed or stop (works independently of auto speed)</li>
      *   <li><b>Cobweb slowdown</b> — player inside cobweb → 25% speed
      *       (prevents server rubberbanding; works independently of auto speed)</li>
-     *   <li><b>Emergency brake</b> — player body inside a solid block → min speed</li>
-     *   <li><b>Movement blockage</b> — server rejecting position packets → min speed</li>
-     *   <li><b>Water penalty</b> — head underwater → min speed (avoids mining speed penalty)</li>
-     *   <li><b>Density scan</b> — block density ahead → smooth interpolation</li>
+     *   <li><b>Emergency brake</b> — player body inside a solid block →
+     *       emergency speed (works independently of auto speed)</li>
+     *   <li><b>Movement blockage</b> — server rejecting position packets →
+     *       emergency speed (works independently of auto speed)</li>
+     *   <li><b>Water penalty</b> — head underwater →
+     *       emergency speed (avoids mining speed penalty; works independently of auto speed)</li>
+     *   <li><b>Density scan</b> — block density ahead → smooth interpolation
+     *       (auto-speed only)</li>
      * </ol>
      */
     private double getEffectiveSpeed(Vec3 playerPos, Vec3 direction) {
@@ -876,6 +883,32 @@ public class SweepExecutor {
             return Math.max(0.1, effectiveMax * 0.25);
         }
 
+        // --- Always-on protections (regardless of auto-speed mode) ---
+        // These must run for ALL modes because the hazards they detect
+        // (getting stuck in a block, server rejecting movement, water
+        // mining penalty) cause rubberbanding and tp-loops regardless
+        // of whether the user picked a fixed or adaptive speed.
+
+        // Player body embedded in a solid block → emergency brake
+        if (checkPlayerStuck(client)) {
+            blockedTicks = BLOCKED_TICK_THRESHOLD; // also mark as blocked
+            return EMERGENCY_SPEED;
+        }
+
+        // Server rejected our movement — player isn't actually advancing.
+        // checkMovementBlocked() is already called at the top of doMove() /
+        // doApproach(); here we just check the accumulated blockedTicks counter.
+        if (blockedTicks >= BLOCKED_TICK_THRESHOLD) {
+            return EMERGENCY_SPEED;
+        }
+
+        // Head in water → 5× mining penalty (25× if also floating)
+        // Slow to emergency speed so the miner/printer has enough time per block
+        if (checkPlayerInWater(client)) {
+            return EMERGENCY_SPEED;
+        }
+
+        // --- Auto-speed features (density-based adaptive speed) ---
         if (!SweepState.isAutoSpeed()) {
             return SweepState.getSpeed();
         }
@@ -885,26 +918,7 @@ public class SweepExecutor {
             return minSpeed;
         }
 
-        // Tier 1: player body embedded in a solid block
-        if (checkPlayerStuck(client)) {
-            blockedTicks = BLOCKED_TICK_THRESHOLD; // also mark as blocked
-            return minSpeed;
-        }
-
-        // Tier 2: server rejected our movement — player isn't actually advancing.
-        // checkMovementBlocked() is already called at the top of doMove() /
-        // doApproach(); here we just check the accumulated blockedTicks counter.
-        if (blockedTicks >= BLOCKED_TICK_THRESHOLD) {
-            return minSpeed;
-        }
-
-        // Tier 3: head in water → 5× mining penalty (25× if also floating)
-        // Slow to min speed so the miner/printer has enough time per block
-        if (checkPlayerInWater(client)) {
-            return minSpeed;
-        }
-
-        // Tier 4: predictive density scan ahead
+        // Predictive density scan ahead
         densityScanTickCounter++;
         if (densityScanTickCounter >= DENSITY_SCAN_INTERVAL && direction != null) {
             densityScanTickCounter = 0;
@@ -975,13 +989,14 @@ public class SweepExecutor {
 
     /**
      * Returns the {@code onGround} flag for movement packets.
-     * Spoofs {@code true} when auto speed is on, or when the player is in a
-     * cobweb — both cases need to eliminate the 5× floating mining penalty
-     * so auto-mining tools can break blocks at full speed.  Since {@code /cfly}
-     * enables flight permissions, the server won't kick for the inconsistency.
+     * Always spoofs {@code true} when the player is flying to eliminate the
+     * 5× floating mining penalty, regardless of auto-speed mode.  Also spoofs
+     * when inside a cobweb (cobweb slowdown is separate from flight penalty).
+     * Since {@code /cfly} enables flight permissions, the server won't kick
+     * for the onGround inconsistency.
      */
     private boolean getSpoofedOnGround(Minecraft client) {
-        if (SweepState.isAutoSpeed()) return true;
+        if (client.player != null && client.player.getAbilities().flying) return true;
         if (checkPlayerInCobweb(client)) return true;
         return client.player != null && client.player.onGround();
     }
