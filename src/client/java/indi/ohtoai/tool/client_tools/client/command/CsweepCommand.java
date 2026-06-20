@@ -3,6 +3,7 @@ package indi.ohtoai.tool.client_tools.client.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.DoubleArgumentType;
 import com.mojang.brigadier.arguments.IntegerArgumentType;
+import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.LitematicaIntegration;
@@ -64,9 +65,30 @@ public class CsweepCommand {
         return suggestions.buildFuture();
     };
 
+    private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"pos1", "pos2", "radius", "speed", "maxspeed",
+                "show", "litematica", "nearest", "autospeed", "avoidwater", "blockdetect",
+                "next", "expand", "contract", "start", "stop", "pause", "status", "penalty", "reset"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
+
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
             literal("csweep")
+                .executes(ctx -> showBriefHelp(ctx.getSource()))
+                // /csweep help [subcommand]
+                .then(literal("help")
+                    .executes(ctx -> showHelp(ctx.getSource()))
+                    .then(argument("subcommand", StringArgumentType.word())
+                        .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
+                        .executes(ctx -> showHelpFor(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "subcommand")))))
                 // ---- pos1 ----
                 .then(literal("pos1")
                     .executes(ctx -> setPos1Aimed(ctx.getSource()))
@@ -204,10 +226,102 @@ public class CsweepCommand {
                 // ---- status ----
                 .then(literal("status")
                     .executes(ctx -> showStatus(ctx.getSource())))
+                // ---- penalty (debug mining penalty / onGround state) ----
+                .then(literal("penalty")
+                    .executes(ctx -> showPenalty(ctx.getSource())))
                 // ---- reset ----
                 .then(literal("reset")
                     .executes(ctx -> resetSweep(ctx.getSource())))
         );
+    }
+
+    // ==================== Help ====================
+
+    private static int showBriefHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.brief"));
+        return 1;
+    }
+
+    private static int showHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.header"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.overview"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.pos"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.radius"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.speed"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.maxspeed"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.autospeed"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.avoidwater"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.blockdetect"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.show"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.litematica"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.nearest"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.expand_contract"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.next"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.control"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.penalty"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.quick_start"));
+        return 1;
+    }
+
+    private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
+        switch (subcommand.toLowerCase()) {
+            case "pos1", "pos2" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.pos_detail"));
+            }
+            case "radius" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.radius_detail"));
+            }
+            case "speed" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.speed_detail"));
+            }
+            case "maxspeed" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.maxspeed_detail"));
+            }
+            case "autospeed" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.autospeed_detail"));
+            }
+            case "avoidwater" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.avoidwater_detail"));
+            }
+            case "blockdetect" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.blockdetect_detail"));
+            }
+            case "show" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.show_detail"));
+            }
+            case "litematica" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.litematica_detail"));
+            }
+            case "nearest" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.nearest_detail"));
+            }
+            case "expand", "contract" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.expand_contract_detail"));
+            }
+            case "next" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.next_detail"));
+            }
+            case "start" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.start_detail"));
+            }
+            case "stop" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.stop_detail"));
+            }
+            case "pause" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.pause_detail"));
+            }
+            case "status" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.status_detail"));
+            }
+            case "penalty" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.penalty_detail"));
+            }
+            case "reset" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.reset_detail"));
+            }
+            default -> source.sendFeedback(Component.translatable("client-tools.csweep.help.unknown_subcommand", subcommand));
+        }
+        return 1;
     }
 
     // ==================== pos1 / pos2 ====================
@@ -884,6 +998,8 @@ public class CsweepCommand {
             SweepState.isBlockageStop()
                 ? Component.translatable("client-tools.csweep.blockdetect_mode_wait").getString()
                 : Component.translatable("client-tools.csweep.blockdetect_mode_slow").getString()));
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_avoidwater",
+            SweepState.isAvoidWater() ? "§aON" : "§7OFF"));
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_show",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",
@@ -911,6 +1027,7 @@ public class CsweepCommand {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_running",
                 executor.getCurrentStationIndex() + 1, executor.getTotalStations()));
             sendProgressBar(source, executor);
+            sendPenaltyBrief(source, executor);
         } else if (executor.isDone()) {
             source.sendFeedback(Component.translatable("client-tools.csweep.status_done", executor.getTotalStations()));
         } else if (executor.isError()) {
@@ -962,6 +1079,117 @@ public class CsweepCommand {
             return m + "m " + s + "s";
         } else {
             return totalSeconds + "s";
+        }
+    }
+
+    // ==================== penalty ====================
+
+    private static int showPenalty(FabricClientCommandSource source) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
+            return 0;
+        }
+
+        SweepExecutor executor = SweepExecutor.getInstance();
+        SweepExecutor.SweepPenaltyStatus p = executor.getPenaltyStatus(client);
+        if (p == null) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
+            return 0;
+        }
+
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_header"));
+
+        // --- Flight / onGround section ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_flying",
+            p.isFlying() ? "§aYES" : "§7NO"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_onground",
+            p.actualOnGround() ? "§atrue" : "§efalse",
+            p.spoofedOnGround() ? "§atrue" : "§efalse"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_block_below",
+            p.hasBlockBelow() ? "§aYES" : "§cNO"));
+
+        // Explain the floating penalty if applicable
+        if (p.isFlying() && !p.actualOnGround() && !p.hasBlockBelow()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.penalty_floating_warn"));
+        }
+        if (p.spoofedOnGround() != p.actualOnGround()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.penalty_spoof_note"));
+        }
+
+        // --- Water ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_water",
+            p.inWater() ? "§bYES §7(5×–25×)" : "§7NO"));
+        if (p.inWater()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.penalty_water_detail"));
+        }
+
+        // --- Cobweb ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_cobweb",
+            p.inCobweb() ? "§8YES §7(25%)" : "§7NO"));
+
+        // --- Stuck ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_stuck",
+            p.stuckInBlock() ? "§cYES" : "§7NO"));
+
+        // --- Movement blocked ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_blocked",
+            p.blockedTicks() >= p.blockedTickThreshold()
+                ? "§c" + p.blockedTicks() + " ticks ≥ " + p.blockedTickThreshold()
+                : "§7" + p.blockedTicks() + " / " + p.blockedTickThreshold()));
+
+        // --- Backward blockage ---
+        if (p.blockageDetection()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.penalty_blockage",
+                p.blockageCount(),
+                p.blockageThreshold(),
+                p.blockageCount() > p.blockageThreshold()
+                    ? (p.blockageStop() ? "§cSTOP" : "§eSLOW 20%")
+                    : "§7OK"));
+        }
+
+        // --- Speed summary ---
+        String speedLine;
+        if (p.autoSpeed()) {
+            speedLine = Component.translatable("client-tools.csweep.penalty_speed_auto",
+                String.format("%.1f", p.configuredSpeed()),
+                String.format("%.1f", SweepState.getMaxSpeed()),
+                String.format("%.1f", p.effectiveSpeed()),
+                String.format("%.2f", p.density())).getString();
+        } else {
+            speedLine = Component.translatable("client-tools.csweep.penalty_speed_fixed",
+                String.format("%.1f", p.configuredSpeed()),
+                String.format("%.1f", p.effectiveSpeed())).getString();
+        }
+        source.sendFeedback(Component.literal(speedLine));
+
+        // --- Flags ---
+        source.sendFeedback(Component.translatable("client-tools.csweep.penalty_flags",
+            p.avoidWater() ? "§aON" : "§7OFF",
+            p.blockageDetection() ? "§aON" : "§7OFF",
+            p.isRunning() ? "§aRUNNING" : "§7IDLE"));
+
+        return 1;
+    }
+
+    /** One-line penalty summary appended to /csweep status when running. */
+    private static void sendPenaltyBrief(FabricClientCommandSource source, SweepExecutor executor) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return;
+        SweepExecutor.SweepPenaltyStatus p = executor.getPenaltyStatus(client);
+        if (p == null) return;
+
+        StringBuilder brief = new StringBuilder();
+        if (p.inWater()) brief.append(" §3水");
+        if (p.isFlying() && !p.actualOnGround() && !p.hasBlockBelow()) brief.append(" §7浮空");
+        if (p.inCobweb()) brief.append(" §8蛛网");
+        if (p.stuckInBlock()) brief.append(" §4卡方块");
+        if (p.blockedTicks() >= p.blockedTickThreshold()) brief.append(" §c移阻");
+        if (p.blockageDetection() && p.blockageCount() > p.blockageThreshold())
+            brief.append(" §6后方").append(p.blockageCount());
+
+        if (brief.length() > 0) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.penalty_brief", brief.toString()));
         }
     }
 

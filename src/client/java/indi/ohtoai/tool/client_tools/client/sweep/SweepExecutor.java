@@ -131,6 +131,117 @@ public class SweepExecutor {
     private static final double MOVE_PROGRESS_RATIO = 0.3;  // actual/expected ratio below which = blocked
     private static final double EMERGENCY_SPEED = 0.5;      // speed when stuck/blocked/underwater
 
+    // --- Penalty status (exposed for /csweep penalty) ---
+
+    /**
+     * Snapshot of all mining-penalty-related state at a point in time.
+     * Used by {@code /csweep penalty} to help debug why the sweep is slow
+     * and whether the onGround spoof is actually taking effect server-side.
+     */
+    public record SweepPenaltyStatus(
+        boolean inWater,
+        boolean isFlying,
+        boolean actualOnGround,
+        boolean spoofedOnGround,
+        boolean hasBlockBelow,
+        boolean inCobweb,
+        boolean stuckInBlock,
+        int blockedTicks,
+        int blockedTickThreshold,
+        int blockageCount,
+        int blockageThreshold,
+        boolean blockageStop,
+        double effectiveSpeed,
+        double configuredSpeed,
+        double density,
+        boolean autoSpeed,
+        boolean avoidWater,
+        boolean blockageDetection,
+        boolean isRunning
+    ) {}
+
+    /**
+     * Collects the current penalty state for debugging/display.
+     * Safe to call from any thread — reads only cached fields and
+     * the player state via the provided client reference.
+     */
+    public SweepPenaltyStatus getPenaltyStatus(Minecraft client) {
+        if (client.player == null || client.level == null) {
+            return null;
+        }
+
+        boolean inWater = checkPlayerInWater(client);
+        boolean isFlying = client.player.getAbilities().flying;
+        boolean actualOnGround = client.player.onGround();
+        boolean spoofedOnGround = getSpoofedOnGround(client);
+        boolean hasBlockBelow = checkBlockBelow(client);
+        boolean inCobweb = checkPlayerInCobweb(client);
+        boolean stuckInBlock = checkPlayerStuck(client);
+        boolean isRunning = state == State.MOVING || state == State.APPROACHING;
+
+        // Compute effective speed the same way the tick loop would
+        double effectiveSpeed = isRunning ? computeEffectiveSpeed(client) : SweepState.getSpeed();
+
+        return new SweepPenaltyStatus(
+            inWater, isFlying, actualOnGround, spoofedOnGround,
+            hasBlockBelow, inCobweb, stuckInBlock,
+            blockedTicks, BLOCKED_TICK_THRESHOLD,
+            cachedBlockageCount, BLOCKAGE_THRESHOLD,
+            SweepState.isBlockageStop(),
+            effectiveSpeed, SweepState.getSpeed(), cachedDensity,
+            SweepState.isAutoSpeed(), SweepState.isAvoidWater(),
+            SweepState.isBlockageDetection(), isRunning
+        );
+    }
+
+    /**
+     * Computes effective speed for display (does not mutate state).
+     * Mirrors {@link #getEffectiveSpeed(Vec3, Vec3)} but safe for
+     * read-only calls from outside the tick loop.
+     */
+    private double computeEffectiveSpeed(Minecraft client) {
+        if (SweepState.isBlockageDetection()
+            && cachedBlockageCount > BLOCKAGE_THRESHOLD) {
+            if (SweepState.isBlockageStop()) {
+                return 0.0;
+            } else {
+                return Math.max(0.5, SweepState.getSpeed() * 0.2);
+            }
+        }
+        if (checkPlayerInCobweb(client)) {
+            double minSpeed = SweepState.getSpeed();
+            double effectiveMax = SweepState.isAutoSpeed()
+                ? Math.max(minSpeed, SweepState.getMaxSpeed())
+                : minSpeed;
+            return Math.max(0.1, effectiveMax * 0.25);
+        }
+        if (checkPlayerStuck(client)) return EMERGENCY_SPEED;
+        if (blockedTicks >= BLOCKED_TICK_THRESHOLD) return EMERGENCY_SPEED;
+        if (checkPlayerInWater(client)) return EMERGENCY_SPEED;
+        if (!SweepState.isAutoSpeed()) return SweepState.getSpeed();
+        double minSpeed = SweepState.getSpeed();
+        double maxSpeed = SweepState.getMaxSpeed();
+        if (maxSpeed < minSpeed) return minSpeed;
+        return densityToSpeed(minSpeed, maxSpeed, cachedDensity);
+    }
+
+    /**
+     * Checks whether there is a solid (non-air, collidable) block directly
+     * below the player's feet.  Useful for verifying whether the onGround
+     * spoof is masking a real floating penalty.
+     */
+    private boolean checkBlockBelow(Minecraft client) {
+        if (client.player == null || client.level == null) return false;
+        Vec3 pos = client.player.position();
+        BlockPos below = new BlockPos(
+            (int) Math.floor(pos.x),
+            (int) Math.floor(pos.y - 0.01),
+            (int) Math.floor(pos.z));
+        if (!client.level.isLoaded(below)) return false;
+        BlockState state = client.level.getBlockState(below);
+        return !state.isAir() && !state.getCollisionShape(client.level, below).isEmpty();
+    }
+
     // --- Public API ---
 
     public void start() {
@@ -396,7 +507,7 @@ public class SweepExecutor {
 
     private static final int ACTION_BAR_WIDTH = 10;
 
-    /** Updates the action bar with a compact progress bar, percentage, and ETA. */
+    /** Updates the action bar with a compact progress bar, percentage, ETA, and penalty indicators. */
     private void updateActionBar(Minecraft client) {
         if (totalAllRegionsLength <= 0 || client.player == null) return;
 
@@ -421,9 +532,36 @@ public class SweepExecutor {
         String speedPart = SweepState.isAutoSpeed()
             ? ("§dAUTO §f" + String.format("%.1f", speed))
             : ("§f" + String.format("%.1f", speed));
-        String msg = bar + " §b" + String.format("%.1f", pct) + "%% §7| §e"
-            + compactEta(etaSeconds) + " §7| " + speedPart + " §7| §f" + station + "/" + totalStations;
-        client.player.displayClientMessage(Component.literal(msg), true);
+        StringBuilder msg = new StringBuilder();
+        msg.append(bar).append(" §b").append(String.format("%.1f", pct)).append("%% §7| §e")
+            .append(compactEta(etaSeconds)).append(" §7| ").append(speedPart)
+            .append(" §7| §f").append(station).append("/").append(totalStations);
+
+        // ---- Compact penalty indicators (only shown when active) ----
+        StringBuilder penalties = new StringBuilder();
+        if (checkPlayerInWater(client)) {
+            penalties.append(" §3💧"); // water drop
+        }
+        if (client.player.getAbilities().flying && !client.player.onGround() && !checkBlockBelow(client)) {
+            penalties.append(" §7☁"); // cloud = floating with no block below
+        }
+        if (checkPlayerInCobweb(client)) {
+            penalties.append(" §8🕸"); // cobweb
+        }
+        if (blockedTicks >= BLOCKED_TICK_THRESHOLD) {
+            penalties.append(" §c✗"); // X = movement blocked
+        }
+        if (checkPlayerStuck(client)) {
+            penalties.append(" §4■"); // filled square = stuck in block
+        }
+        if (SweepState.isBlockageDetection() && cachedBlockageCount > BLOCKAGE_THRESHOLD) {
+            penalties.append(" §6B").append(cachedBlockageCount); // blockage count
+        }
+        if (penalties.length() > 0) {
+            msg.append(" §7|").append(penalties);
+        }
+
+        client.player.displayClientMessage(Component.literal(msg.toString()), true);
     }
 
     /** Clears the action bar (sends an empty string). */

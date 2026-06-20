@@ -2,6 +2,7 @@ package indi.ohtoai.tool.client_tools.client.sweep;
 
 import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.core.BlockPos;
+import net.minecraft.core.Direction;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
@@ -47,6 +48,11 @@ public class LitematicaIntegration {
     private static Method boxGetPos1Method;
     /** Reflected method: Box.getPos2() */
     private static Method boxGetPos2Method;
+
+    // --- Move selection ---
+
+    /** Reflected method: SelectionManager.moveSelectedElement(String, Direction, int) */
+    private static Method moveSelectedElementMethod;
 
     private LitematicaIntegration() {}
 
@@ -136,6 +142,58 @@ public class LitematicaIntegration {
         }
     }
 
+    /**
+     * Moves all sub-regions of the current Litematica selection by the given offset.
+     *
+     * @param dx offset along the X axis (positive = east, negative = west)
+     * @param dy offset along the Y axis (positive = up, negative = down)
+     * @param dz offset along the Z axis (positive = south, negative = north)
+     * @return the number of sub-regions moved, or -1 if the move failed
+     */
+    public static int moveSelection(int dx, int dy, int dz) {
+        if (!isAvailable()) return -1;
+
+        try {
+            Object selectionManager = getSelectionManagerMethod.invoke(null);
+            if (selectionManager == null) return -1;
+            Object currentSelection = getCurrentSelectionMethod.invoke(selectionManager);
+            if (currentSelection == null) return -1;
+            @SuppressWarnings("unchecked")
+            List<?> boxes = (List<?>) getAllSubRegionBoxesMethod.invoke(currentSelection);
+            if (boxes == null || boxes.isEmpty()) return 0;
+
+            // Apply each non-zero axis offset to every sub-region
+            applyMove(selectionManager, boxes, dx, Direction.EAST, Direction.WEST);
+            applyMove(selectionManager, boxes, dy, Direction.UP, Direction.DOWN);
+            applyMove(selectionManager, boxes, dz, Direction.SOUTH, Direction.NORTH);
+
+            return boxes.size();
+        } catch (IllegalAccessException | InvocationTargetException e) {
+            return -1;
+        }
+    }
+
+    private static void applyMove(Object selectionManager, List<?> boxes,
+                                   int offset, Direction posDir, Direction negDir)
+            throws IllegalAccessException, InvocationTargetException {
+        if (offset == 0) return;
+        Direction dir = offset > 0 ? posDir : negDir;
+        int amount = Math.abs(offset);
+        int idx = 0;
+        for (Object box : boxes) {
+            if (box == null) continue;
+            idx++;
+            String name = "Box " + idx;
+            if (boxGetNameMethod != null) {
+                try {
+                    String n = (String) boxGetNameMethod.invoke(box);
+                    if (n != null && !n.isEmpty()) name = n;
+                } catch (Exception ignored) {}
+            }
+            moveSelectedElementMethod.invoke(selectionManager, name, dir, amount);
+        }
+    }
+
     // --- Init ---
 
     private static void ensureInit() {
@@ -217,5 +275,9 @@ public class LitematicaIntegration {
         } catch (NoSuchMethodException e) {
             boxGetNameMethod = null; // optional
         }
+
+        // 9. SelectionManager.moveSelectedElement(String, Direction, int)
+        moveSelectedElementMethod = selectionManagerClass.getMethod(
+            "moveSelectedElement", String.class, Direction.class, int.class);
     }
 }

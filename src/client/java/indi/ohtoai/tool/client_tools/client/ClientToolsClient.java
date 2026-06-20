@@ -8,6 +8,7 @@ import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
 import indi.ohtoai.tool.client_tools.client.command.CchatCommand;
 import indi.ohtoai.tool.client_tools.client.command.CcraftCommand;
 import indi.ohtoai.tool.client_tools.client.command.CflyCommand;
+import indi.ohtoai.tool.client_tools.client.command.CplacementCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
@@ -30,6 +31,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CchatCommand.register(dispatcher);
 			CcraftCommand.register(dispatcher);
 			CflyCommand.register(dispatcher);
+			CplacementCommand.register(dispatcher);
 			CsweepCommand.register(dispatcher);
 			CsequenceCommand.register(dispatcher);
 		});

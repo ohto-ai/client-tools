@@ -1,11 +1,14 @@
 package indi.ohtoai.tool.client_tools.client.command;
 
 import com.mojang.brigadier.CommandDispatcher;
+import com.mojang.brigadier.arguments.StringArgumentType;
+import com.mojang.brigadier.suggestion.SuggestionProvider;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket;
 
+import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.argument;
 import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.literal;
 
 public class CflyCommand {
@@ -18,6 +21,17 @@ public class CflyCommand {
 
     public static boolean isAutoJump() { return autoJump; }
     public static void setAutoJump(boolean v) { autoJump = v; }
+
+    private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"enable", "disable", "jump", "status"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
@@ -39,7 +53,47 @@ public class CflyCommand {
                 .then(literal("status")
                     .executes(ctx -> showStatus(ctx.getSource()))
                 )
+                .then(literal("help")
+                    .executes(ctx -> showHelp(ctx.getSource()))
+                    .then(argument("subcommand", StringArgumentType.word())
+                        .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
+                        .executes(ctx -> showHelpFor(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "subcommand")))))
         );
+    }
+
+    // --- Help executors ---
+
+    private static int showHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.header"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.overview"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.root"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.enable"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.disable"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.jump"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.status"));
+        source.sendFeedback(Component.translatable("client-tools.cfly.help.example"));
+        return 1;
+    }
+
+    private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
+        switch (subcommand.toLowerCase()) {
+            case "enable" -> {
+                source.sendFeedback(Component.translatable("client-tools.cfly.help.enable_detail"));
+            }
+            case "disable" -> {
+                source.sendFeedback(Component.translatable("client-tools.cfly.help.disable_detail"));
+            }
+            case "jump" -> {
+                source.sendFeedback(Component.translatable("client-tools.cfly.help.jump_detail"));
+                source.sendFeedback(Component.translatable("client-tools.cfly.help.jump_sub"));
+            }
+            case "status" -> {
+                source.sendFeedback(Component.translatable("client-tools.cfly.help.status_detail"));
+            }
+            default -> source.sendFeedback(Component.translatable("client-tools.cfly.help.unknown_subcommand", subcommand));
+        }
+        return 1;
     }
 
     /**
@@ -64,7 +118,6 @@ public class CflyCommand {
         boolean newState = !abilities.flying;
         abilities.flying = newState;
 
-        // Sync abilities to server
         if (client.player.connection != null) {
             client.player.connection.send(new ServerboundPlayerAbilitiesPacket(abilities));
         }
@@ -106,7 +159,6 @@ public class CflyCommand {
         }
 
         if (abilities.flying == enable) {
-            // Already in the desired state
             source.sendFeedback(Component.translatable(
                 enable ? "client-tools.cfly.already_enabled" : "client-tools.cfly.already_disabled"));
             return 1;

@@ -42,12 +42,21 @@ public class CtimerCommand {
     private static final SuggestionProvider<FabricClientCommandSource> COMMAND_SUGGESTIONS =
         (ctx, builder) -> {
             String remaining = builder.getRemaining().toLowerCase();
-            // Suggest all registered client commands (dynamically from the dispatcher)
             for (var child : ctx.getRootNode().getChildren()) {
                 String name = child.getName();
-                // Exclude /ctimer itself to avoid accidental recursion
                 if (!name.equals("ctimer") && name.toLowerCase().startsWith(remaining)) {
                     builder.suggest(name + " ");
+                }
+            }
+            return builder.buildFuture();
+        };
+
+    private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"start", "stop", "stop-all", "list"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
                 }
             }
             return builder.buildFuture();
@@ -62,6 +71,14 @@ public class CtimerCommand {
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
             literal("ctimer")
+                .executes(ctx -> showBriefHelp(ctx.getSource()))
+                // /ctimer help [subcommand]
+                .then(literal("help")
+                    .executes(ctx -> showHelp(ctx.getSource()))
+                    .then(argument("subcommand", StringArgumentType.word())
+                        .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
+                        .executes(ctx -> showHelpFor(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "subcommand")))))
                 // /ctimer stop-all
                 .then(literal("stop-all")
                     .executes(ctx -> stopAll(ctx.getSource()))
@@ -98,10 +115,49 @@ public class CtimerCommand {
         );
     }
 
+    // --- Help executors ---
+
+    private static int showBriefHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.brief"));
+        return 1;
+    }
+
+    private static int showHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.header"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.overview"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.start"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.stop"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.stop_all"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.list"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.duration_format"));
+        source.sendFeedback(Component.translatable("client-tools.ctimer.help.example"));
+        return 1;
+    }
+
+    private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
+        switch (subcommand.toLowerCase()) {
+            case "start" -> {
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.start_detail"));
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.start_example"));
+            }
+            case "stop" -> {
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.stop_detail"));
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.stop_example"));
+            }
+            case "stop-all" -> {
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.stop_all_detail"));
+            }
+            case "list" -> {
+                source.sendFeedback(Component.translatable("client-tools.ctimer.help.list_detail"));
+            }
+            default -> source.sendFeedback(Component.translatable("client-tools.ctimer.help.unknown_subcommand", subcommand));
+        }
+        return 1;
+    }
+
     // --- Command executors ---
 
     private static int startTimer(FabricClientCommandSource source, String countStr, String durationStr, String command) {
-        // Parse count
         int times;
         if ("infinite".equalsIgnoreCase(countStr)) {
             times = -1;
@@ -118,14 +174,12 @@ public class CtimerCommand {
             }
         }
 
-        // Parse duration
         int intervalTicks = parseDuration(durationStr);
         if (intervalTicks <= 0) {
             source.sendFeedback(Component.translatable("client-tools.ctimer.duration_invalid", durationStr));
             return 0;
         }
 
-        // Create timer
         TimerInstance timer = TimerManager.addTimer(times, intervalTicks, command);
 
         String timesDesc = times == -1 ? "infinite" : String.valueOf(times);
@@ -195,7 +249,6 @@ public class CtimerCommand {
         String numberPart;
 
         if (input.endsWith("ms")) {
-            // 1 Minecraft tick ≈ 50 ms
             numberPart = input.substring(0, input.length() - 2);
             try {
                 double ms = Double.parseDouble(numberPart);
@@ -237,7 +290,6 @@ public class CtimerCommand {
     public static String formatDuration(int ticks) {
         if (ticks <= 0) return "0t";
 
-        // Less than 1 second: show ticks (with ms equivalent for sub-second precision)
         if (ticks < 20) {
             return ticks + "t";
         }

@@ -74,11 +74,32 @@ public class CsequenceCommand {
             return builder.buildFuture();
         };
 
+    // --- Help subcommand suggestions ---
+
+    private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"new", "edit", "run", "stop", "list", "delete", "status", "folder"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
+
     // --- Registration ---
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
             literal("csequence")
+                .executes(ctx -> showBriefHelp(ctx.getSource()))
+                // /csequence help [subcommand]
+                .then(literal("help")
+                    .executes(ctx -> showHelp(ctx.getSource()))
+                    .then(argument("subcommand", StringArgumentType.word())
+                        .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
+                        .executes(ctx -> showHelpFor(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "subcommand")))))
                 // /csequence new <name>
                 .then(literal("new")
                     .then(argument("name", StringArgumentType.word())
@@ -126,6 +147,60 @@ public class CsequenceCommand {
                 .then(literal("folder")
                     .executes(ctx -> openFolder(ctx.getSource())))
         );
+    }
+
+    // ==================== Help ====================
+
+    private static int showBriefHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.brief"));
+        return 1;
+    }
+
+    private static int showHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.header"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.overview"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.new"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.edit"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.run"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.list"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.delete"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.status"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.folder"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.stop"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.duration_format"));
+        source.sendFeedback(Component.translatable("client-tools.csequence.help.example"));
+        return 1;
+    }
+
+    private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
+        switch (subcommand.toLowerCase()) {
+            case "new" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.new_detail"));
+            }
+            case "edit" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.edit_detail"));
+            }
+            case "run" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.run_detail"));
+            }
+            case "stop" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.stop_detail"));
+            }
+            case "list" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.list_detail"));
+            }
+            case "delete" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.delete_detail"));
+            }
+            case "status" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.status_detail"));
+            }
+            case "folder" -> {
+                source.sendFeedback(Component.translatable("client-tools.csequence.help.folder_detail"));
+            }
+            default -> source.sendFeedback(Component.translatable("client-tools.csequence.help.unknown_subcommand", subcommand));
+        }
+        return 1;
     }
 
     // ==================== new ====================

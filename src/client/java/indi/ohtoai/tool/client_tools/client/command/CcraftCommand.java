@@ -110,11 +110,33 @@ public class CcraftCommand {
             return builder.buildFuture();
         };
 
+    // --- Help subcommand suggestions ---
+
+    private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"source", "product", "station", "input", "output",
+                "status", "show", "clear", "count", "stop", "run"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
+
     // --- Registration ---
 
     public static void register(CommandDispatcher<FabricClientCommandSource> dispatcher) {
         dispatcher.register(
             literal("ccraft")
+                .executes(ctx -> showBriefHelp(ctx.getSource()))
+                // /ccraft help [subcommand]
+                .then(literal("help")
+                    .executes(ctx -> showHelp(ctx.getSource()))
+                    .then(argument("subcommand", StringArgumentType.word())
+                        .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
+                        .executes(ctx -> showHelpFor(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "subcommand")))))
                 // /ccraft source <item>
                 .then(literal("source")
                     .then(argument("item", StringArgumentType.greedyString())
@@ -261,6 +283,71 @@ public class CcraftCommand {
                     .executes(ctx -> runCraft(ctx.getSource()))
                 )
         );
+    }
+
+    // ==================== Help ====================
+
+    private static int showBriefHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.brief"));
+        return 1;
+    }
+
+    private static int showHelp(FabricClientCommandSource source) {
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.header"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.overview"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.source"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.product"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.station"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.input"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.output"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.count"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.show"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.status"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.run"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.stop"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.clear"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.quick_start"));
+        return 1;
+    }
+
+    private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
+        switch (subcommand.toLowerCase()) {
+            case "source" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.source_detail"));
+            }
+            case "product" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.product_detail"));
+            }
+            case "station" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.station_detail"));
+            }
+            case "input" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.input_detail"));
+            }
+            case "output" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.output_detail"));
+            }
+            case "count" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.count_detail"));
+            }
+            case "show" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.show_detail"));
+            }
+            case "status" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.status_detail"));
+            }
+            case "run" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.run_detail"));
+            }
+            case "stop" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.stop_detail"));
+            }
+            case "clear" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.clear_detail"));
+            }
+            default -> source.sendFeedback(Component.translatable("client-tools.ccraft.help.unknown_subcommand", subcommand));
+        }
+        return 1;
     }
 
     // ==================== Helpers ====================
