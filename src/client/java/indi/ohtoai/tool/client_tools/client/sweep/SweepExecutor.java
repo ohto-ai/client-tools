@@ -705,6 +705,10 @@ public class SweepExecutor {
     // --- APPROACHING (smooth fly-in to path start) ---
 
     private void doApproach(Minecraft client) {
+        // Track movement blockage so the approach phase also pauses
+        // when the server rejects position packets.
+        checkMovementBlocked(client);
+
         // Compute direction for density scan
         Vec3 direction = null;
         if (approachTarget != null && approachOrigin != null) {
@@ -753,6 +757,11 @@ public class SweepExecutor {
             return;
         }
 
+        // Check whether the server rejected our last movement BEFORE
+        // we advance distanceTraveled.  This runs early so we can
+        // decide to hold position this tick instead of rubberbanding.
+        boolean movementBlocked = checkMovementBlocked(client);
+
         // Determine movement direction from current segment
         int segIdx = findSegment(distanceTraveled);
         Vec3 direction = null;
@@ -767,8 +776,10 @@ public class SweepExecutor {
         // Compute effective speed (adaptive or constant)
         double effectiveSpeed = getEffectiveSpeed(client.player.position(), direction);
 
-        // Advance along the path
-        double step = effectiveSpeed / 20.0;
+        // Advance along the path — but NOT if the server rejected our last move.
+        // When movementBlocked is true, distanceTraveled stays put so the sweep
+        // sends the same position again instead of rubberbanding forward.
+        double step = movementBlocked ? 0.0 : effectiveSpeed / 20.0;
         distanceTraveled += step;
 
         if (distanceTraveled >= totalPathLength) {
@@ -880,8 +891,10 @@ public class SweepExecutor {
             return minSpeed;
         }
 
-        // Tier 2: server rejected our movement — player isn't actually advancing
-        if (checkMovementBlocked(client)) {
+        // Tier 2: server rejected our movement — player isn't actually advancing.
+        // checkMovementBlocked() is already called at the top of doMove() /
+        // doApproach(); here we just check the accumulated blockedTicks counter.
+        if (blockedTicks >= BLOCKED_TICK_THRESHOLD) {
             return minSpeed;
         }
 
@@ -1067,6 +1080,8 @@ public class SweepExecutor {
             return false;
         }
 
+        boolean wasBlocked = blockedTicks >= BLOCKED_TICK_THRESHOLD;
+
         double actuallyMoved = currentPos.distanceTo(lastActualPosition);
         double expectedStep = SweepState.getSpeed() / 20.0;
         lastActualPosition = currentPos;
@@ -1078,7 +1093,20 @@ public class SweepExecutor {
             blockedTicks = Math.max(0, blockedTicks - 1);
         }
 
-        return blockedTicks >= BLOCKED_TICK_THRESHOLD;
+        boolean isBlocked = blockedTicks >= BLOCKED_TICK_THRESHOLD;
+
+        // Log state transitions to chat so the player can see what's happening
+        if (isBlocked && !wasBlocked) {
+            int station = globalStationOffset + currentStationIndex;
+            client.player.displayClientMessage(Component.literal(
+                "§c⚠ Sweep blocked §7— §fserver rejected movement at station §e"
+                + station + "§f, waiting for blocks to be mined..."), false);
+        } else if (!isBlocked && wasBlocked) {
+            client.player.displayClientMessage(Component.literal(
+                "§a✔ Sweep resumed §7— §fmovement accepted again"), false);
+        }
+
+        return isBlocked;
     }
 
     /**
