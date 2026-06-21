@@ -1,5 +1,6 @@
 package indi.ohtoai.tool.client_tools.client.craft;
 
+import indi.ohtoai.tool.client_tools.client.util.ContainerUtils;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
@@ -468,7 +469,7 @@ public class CraftingExecutor {
 
     private void doWaitInputOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
-        if (getContainerSize(client.player.containerMenu) >= 0) {
+        if (ContainerUtils.getContainerSize(client.player.containerMenu) >= 0) {
             // Input box opened successfully — reset missing counter
             inputMissingRetries = 0;
             if (autoMode) {
@@ -507,7 +508,7 @@ public class CraftingExecutor {
     private void doScanInput(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int containerSize = getContainerSize(menu);
+        int containerSize = ContainerUtils.getContainerSize(menu);
         if (containerSize < 0) {
             error("Input container not open");
             return;
@@ -588,7 +589,7 @@ public class CraftingExecutor {
     private void doTakeInput(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int containerSize = getContainerSize(menu);
+        int containerSize = ContainerUtils.getContainerSize(menu);
         if (containerSize < 0) {
             error("Input container not open");
             return;
@@ -712,7 +713,7 @@ public class CraftingExecutor {
     private void doTakeInputPrecise(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        if (getContainerSize(menu) < 0) {
+        if (ContainerUtils.getContainerSize(menu) < 0) {
             error("Input container not open");
             return;
         }
@@ -998,7 +999,7 @@ public class CraftingExecutor {
     private void doWaitOutputOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int containerSize = getContainerSize(menu);
+        int containerSize = ContainerUtils.getContainerSize(menu);
         if (containerSize >= 0) {
             // Output box opened successfully — reset missing counter
             outputMissingRetries = 0;
@@ -1041,7 +1042,7 @@ public class CraftingExecutor {
     private void doDepositOutput(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        if (getContainerSize(menu) < 0) {
+        if (ContainerUtils.getContainerSize(menu) < 0) {
             error("Output container not open");
             return;
         }
@@ -1273,7 +1274,7 @@ public class CraftingExecutor {
      * Shift-left-click: moves the entire stack to the appropriate inventory area.
      */
     private void quickMove(Minecraft client, int containerId, int slot) {
-        int stateId = getContainerStateId(client.player.containerMenu);
+        int stateId = ContainerUtils.getContainerStateId(client.player.containerMenu);
         client.player.connection.send(
             new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(
                 containerId, stateId, slot, 0,
@@ -1287,7 +1288,7 @@ public class CraftingExecutor {
      * Used for precise extraction from a slot that has more items than needed.
      */
     private void quickMoveSingle(Minecraft client, int containerId, int slot) {
-        int stateId = getContainerStateId(client.player.containerMenu);
+        int stateId = ContainerUtils.getContainerStateId(client.player.containerMenu);
         client.player.connection.send(
             new net.minecraft.network.protocol.game.ServerboundContainerClickPacket(
                 containerId, stateId, slot, 1,  // button 1 = right-click
@@ -1348,32 +1349,7 @@ public class CraftingExecutor {
 
     // ==================== Static utilities ====================
 
-    /**
-     * Returns the number of container-specific slots for any storage container
-     * (chest, shulker box, barrel, hopper, dispenser, etc.), or -1 if the menu
-     * is not a recognized storage container.
-     *
-     * All vanilla storage containers follow the same layout: the container's own
-     * slots come first (indices 0..N-1), followed by exactly 36 player inventory
-     * slots. So {@code containerSize = totalSlots - 36}.
-     */
-    private static int getContainerSize(AbstractContainerMenu menu) {
-        if (menu == null) return -1;
-        if (menu instanceof CraftingMenu) return -1; // crafting table is handled separately
-        int total = menu.slots.size();
-        if (total <= 36) return -1; // no container-specific slots
-        return total - 36;
-    }
-
-    private static int getContainerStateId(net.minecraft.world.inventory.AbstractContainerMenu menu) {
-        try {
-            java.lang.reflect.Field field = menu.getClass().getDeclaredField("stateId");
-            field.setAccessible(true);
-            return field.getInt(menu);
-        } catch (Exception e) {
-            return 0;
-        }
-    }
+    // getContainerSize and getContainerStateId are now in ContainerUtils (shared utility).
 
     /**
      * Scan for the nearest crafting table within range.

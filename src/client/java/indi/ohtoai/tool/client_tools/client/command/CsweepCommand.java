@@ -65,12 +65,25 @@ public class CsweepCommand {
         return suggestions.buildFuture();
     };
 
+    /** Good floor block candidates for /csweep antiground block. */
+    private static final SuggestionProvider<FabricClientCommandSource> FLOOR_BLOCK_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"minecraft:redstone_ore", "minecraft:deepslate_redstone_ore",
+                "minecraft:note_block", "minecraft:observer", "minecraft:stone", "minecraft:cobblestone",
+                "minecraft:netherrack", "minecraft:end_stone"}) {
+                if (s.toLowerCase().startsWith(remaining)) builder.suggest(s);
+            }
+            return builder.buildFuture();
+        };
+
     private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
         (ctx, builder) -> {
             String remaining = builder.getRemaining().toLowerCase();
             for (String s : new String[]{"pos1", "pos2", "radius", "speed", "maxspeed",
                 "show", "litematica", "nearest", "autospeed", "avoidwater", "blockdetect",
-                "mode", "next", "expand", "contract", "start", "stop", "pause", "status", "penalty", "reset"}) {
+                "mode", "next", "expand", "contract", "start", "stop", "pause", "status", "penalty", "reset",
+                "antiground"}) {
                 if (s.toLowerCase().startsWith(remaining)) {
                     builder.suggest(s);
                 }
@@ -201,6 +214,18 @@ public class CsweepCommand {
                         .executes(ctx -> setBlockageStop(ctx.getSource(), true)))
                     .then(literal("slow")
                         .executes(ctx -> setBlockageStop(ctx.getSource(), false))))
+                // ---- antiground ----
+                .then(literal("antiground")
+                    .executes(ctx -> showAntiPenaltyFloor(ctx.getSource()))
+                    .then(literal("on")
+                        .executes(ctx -> setAntiPenaltyFloor(ctx.getSource(), true)))
+                    .then(literal("off")
+                        .executes(ctx -> setAntiPenaltyFloor(ctx.getSource(), false)))
+                    .then(literal("block")
+                        .then(argument("id", StringArgumentType.greedyString())
+                            .suggests(FLOOR_BLOCK_SUGGESTIONS)
+                            .executes(ctx -> setFloorBlock(ctx.getSource(),
+                                StringArgumentType.getString(ctx, "id"))))))
                 // ---- mode ----
                 .then(literal("mode")
                     .executes(ctx -> showMode(ctx.getSource()))
@@ -266,6 +291,7 @@ public class CsweepCommand {
         source.sendFeedback(Component.translatable("client-tools.csweep.help.next"));
         source.sendFeedback(Component.translatable("client-tools.csweep.help.control"));
         source.sendFeedback(Component.translatable("client-tools.csweep.help.penalty"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.help.antiground"));
         source.sendFeedback(Component.translatable("client-tools.csweep.help.quick_start"));
         return 1;
     }
@@ -325,6 +351,9 @@ public class CsweepCommand {
             }
             case "penalty" -> {
                 source.sendFeedback(Component.translatable("client-tools.csweep.help.penalty_detail"));
+            }
+            case "antiground" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.antiground_detail"));
             }
             case "reset" -> {
                 source.sendFeedback(Component.translatable("client-tools.csweep.help.reset_detail"));
@@ -731,6 +760,65 @@ public class CsweepCommand {
         return 1;
     }
 
+    // ==================== antiground ====================
+
+    private static int showAntiPenaltyFloor(FabricClientCommandSource source) {
+        boolean enabled = SweepState.isAntiPenaltyFloor();
+        String blockId = SweepState.getFloorBlockId();
+        source.sendFeedback(Component.translatable("client-tools.csweep.antiground_status",
+            enabled ? "§aON" : "§7OFF", blockId));
+        if (enabled) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_blacklist_hint",
+                SweepState.getFloorBlockId()));
+        }
+        return 1;
+    }
+
+    private static int setAntiPenaltyFloor(FabricClientCommandSource source, boolean enabled) {
+        if (SweepState.isAntiPenaltyFloor() == enabled) {
+            source.sendFeedback(Component.translatable(
+                enabled ? "client-tools.csweep.antiground_already_on" : "client-tools.csweep.antiground_already_off"));
+            return 1;
+        }
+
+        SweepExecutor executor = SweepExecutor.getInstance();
+        if (executor.isRunning() || executor.isPaused()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_running"));
+            return 0;
+        }
+
+        SweepState.setAntiPenaltyFloor(enabled);
+        if (enabled) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_on",
+                SweepState.getFloorBlockId()));
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_blacklist_hint",
+                SweepState.getFloorBlockId()));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_off"));
+        }
+        return 1;
+    }
+
+    private static int setFloorBlock(FabricClientCommandSource source, String blockId) {
+        // Basic validation: should look like a resource location
+        if (!blockId.contains(":")) {
+            blockId = "minecraft:" + blockId;
+        }
+        var rl = net.minecraft.resources.ResourceLocation.tryParse(blockId);
+        if (rl == null || !net.minecraft.core.registries.BuiltInRegistries.BLOCK.containsKey(rl)) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_block_invalid", blockId));
+            return 0;
+        }
+
+        SweepState.setFloorBlockId(rl.toString());
+        source.sendFeedback(Component.translatable("client-tools.csweep.antiground_block_set", rl.toString()));
+        if (SweepState.isAntiPenaltyFloor()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.antiground_blacklist_hint",
+                SweepState.getFloorBlockId()));
+        }
+        return 1;
+    }
+
     // ==================== mode ====================
 
     private static int showMode(FabricClientCommandSource source) {
@@ -989,7 +1077,8 @@ public class CsweepCommand {
             source.sendFeedback(Component.translatable("client-tools.csweep.not_in_world"));
             return 0;
         }
-        if (!client.player.getAbilities().flying) {
+        // Flight check: skipped when anti-penalty floor is enabled
+        if (!SweepState.isAntiPenaltyFloor() && !client.player.getAbilities().flying) {
             source.sendFeedback(Component.translatable("client-tools.csweep.not_flying"));
             return 0;
         }

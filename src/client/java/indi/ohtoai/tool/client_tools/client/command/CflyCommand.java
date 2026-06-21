@@ -3,6 +3,7 @@ package indi.ohtoai.tool.client_tools.client.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import indi.ohtoai.tool.client_tools.client.config.ClientToolsConfig;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
@@ -16,11 +17,10 @@ public class CflyCommand {
     /**
      * When {@code true}, enabling flight (via /cfly or /cfly enable) will
      * also cause the player to jump off the ground.  Toggled via {@code /cfly jump}.
+     * Persisted in {@code config/client-tools/global.json}.
      */
-    private static boolean autoJump = false;
-
-    public static boolean isAutoJump() { return autoJump; }
-    public static void setAutoJump(boolean v) { autoJump = v; }
+    public static boolean isAutoJump() { return ClientToolsConfig.isAutoJump(); }
+    public static void setAutoJump(boolean v) { ClientToolsConfig.setAutoJump(v); }
 
     private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
         (ctx, builder) -> {
@@ -98,7 +98,7 @@ public class CflyCommand {
 
     /**
      * Toggle flight on/off (backward-compatible convenience).
-     * When enabling flight, respects the {@link #autoJump} setting.
+     * When enabling flight, respects the {@link #isAutoJump()} setting.
      */
     private static int toggleFlight(FabricClientCommandSource source) {
         Minecraft client = Minecraft.getInstance();
@@ -123,10 +123,10 @@ public class CflyCommand {
         }
 
         if (abilities.flying) {
-            if (autoJump && client.player.onGround()) {
+            if (isAutoJump() && client.player.onGround()) {
                 client.player.jumpFromGround();
                 source.sendFeedback(Component.translatable("client-tools.cfly.enabled_jump"));
-            } else if (autoJump) {
+            } else if (isAutoJump()) {
                 source.sendFeedback(Component.translatable("client-tools.cfly.enabled_autojump_on"));
             } else {
                 source.sendFeedback(Component.translatable("client-tools.cfly.enabled"));
@@ -140,7 +140,7 @@ public class CflyCommand {
 
     /**
      * Explicitly set flight to the desired state.
-     * When enabling, respects the {@link #autoJump} setting.
+     * When enabling, respects the {@link #isAutoJump()} setting.
      * If already in the requested state, reports that instead.
      */
     private static int setFlight(FabricClientCommandSource source, boolean enable) {
@@ -171,10 +171,10 @@ public class CflyCommand {
         }
 
         if (enable) {
-            if (autoJump && client.player.onGround()) {
+            if (isAutoJump() && client.player.onGround()) {
                 client.player.jumpFromGround();
                 source.sendFeedback(Component.translatable("client-tools.cfly.enabled_jump"));
-            } else if (autoJump) {
+            } else if (isAutoJump()) {
                 source.sendFeedback(Component.translatable("client-tools.cfly.force_enabled_autojump_on"));
             } else {
                 source.sendFeedback(Component.translatable("client-tools.cfly.force_enabled"));
@@ -189,19 +189,19 @@ public class CflyCommand {
     // ---- Auto-jump mode ----
 
     private static int toggleAutoJump(FabricClientCommandSource source) {
-        autoJump = !autoJump;
+        setAutoJump(!isAutoJump());
         source.sendFeedback(Component.translatable(
-            autoJump ? "client-tools.cfly.autojump_enabled" : "client-tools.cfly.autojump_disabled"));
+            isAutoJump() ? "client-tools.cfly.autojump_enabled" : "client-tools.cfly.autojump_disabled"));
         return 1;
     }
 
     private static int setAutoJumpExplicit(FabricClientCommandSource source, boolean enable) {
-        if (autoJump == enable) {
+        if (isAutoJump() == enable) {
             source.sendFeedback(Component.translatable(
                 enable ? "client-tools.cfly.autojump_already_enabled" : "client-tools.cfly.autojump_already_disabled"));
             return 1;
         }
-        autoJump = enable;
+        setAutoJump(enable);
         source.sendFeedback(Component.translatable(
             enable ? "client-tools.cfly.autojump_enabled" : "client-tools.cfly.autojump_disabled"));
         return 1;
@@ -228,7 +228,7 @@ public class CflyCommand {
         source.sendFeedback(Component.translatable("client-tools.cfly.status_gamemode",
             gamemode));
         source.sendFeedback(Component.translatable("client-tools.cfly.status_autojump",
-            autoJump ? "§aON" : "§7OFF"));
+            isAutoJump() ? "§aON" : "§7OFF"));
 
         return 1;
     }

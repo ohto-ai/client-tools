@@ -498,5 +498,19 @@
   "client-tools.shop.sell_start": "§a§lSelling §e%s §a× §e%s§a...",
   "client-tools.shop.buy_done": "§aBuy complete! §e%s §a× §e%s",
   "client-tools.shop.sell_done": "§aSell complete! §e%s §a× §e%s",
-  "client-tools.shop.error": "§c/cbuy/csell error: %s"
+  "client-tools.shop.error": "§c/cbuy/csell error: %s",
+
+  "client-tools.csweep.antiground_status": "§6Anti-penalty floor: %s§7 | Block: §e%s",
+  "client-tools.csweep.antiground_on": "§aAnti-penalty floor enabled. §7The sweep will shift Y down 0.5 to stand on blocks below stations, using §e%s§7.",
+  "client-tools.csweep.antiground_off": "§eAnti-penalty floor disabled.",
+  "client-tools.csweep.antiground_already_on": "§7Anti-penalty floor was already enabled.",
+  "client-tools.csweep.antiground_already_off": "§7Anti-penalty floor was already disabled.",
+  "client-tools.csweep.antiground_running": "§cCannot change anti-penalty floor while sweep is running. Stop the sweep first.",
+  "client-tools.csweep.antiground_block_set": "§aFloor block set to: §e%s",
+  "client-tools.csweep.antiground_block_invalid": "§cInvalid block ID: %s. Examples: minecraft:redstone_ore, minecraft:stone",
+  "client-tools.csweep.antiground_blacklist_hint": "§d⚑ §7IMPORTANT: Add §e%s §7to your printer/miner blacklist to prevent the floor path from being mined!",
+  "client-tools.csweep.antiground_no_item": "§c⚠ Anti-penalty floor enabled but no §e%s §cfound in inventory. Floor blocks cannot be placed.",
+
+  "client-tools.csweep.help.antiground": "§e/csweep antiground [on|off]  §7Toggle anti-penalty floor path. Places a strip of blocks below stations so the player always stands on solid ground, eliminating the floating mining penalty.\n  §f/csweep antiground block <id> §7— set the floor block type (default: minecraft:redstone_ore)",
+  "client-tools.csweep.help.antiground_detail": "§6Subcommand: antiground\n§7Toggles the anti-penalty floor path feature. When enabled, the sweep:\n  §7- Shifts player Y down 0.5 so feet stand on the block below each station\n  §7- Attempts to place floor blocks below stations\n  §7- Auto-cleans floor blocks by right-clicking after passing\n§7Subcommands:\n  §fon§7/§foff §7— enable/disable\n  §fblock <registry_id> §7— choose the floor block (default: §f§nminecraft:redstone_ore§r§7)\n§7Default block: §f§nminecraft:redstone_ore §r§7— right-click update causes it to glow/update.\n§7Other good choices: §fobserver§7 (auto-detect on place), §fstone§7 (cheap)\n§7§d⚠ Add this block to your printer's blacklist so it doesn't get mined during the sweep."
 }

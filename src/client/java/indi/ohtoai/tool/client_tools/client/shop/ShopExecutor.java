@@ -1,5 +1,6 @@
 package indi.ohtoai.tool.client_tools.client.shop;
 
+import indi.ohtoai.tool.client_tools.client.util.ContainerUtils;
 import it.unimi.dsi.fastutil.ints.Int2ObjectArrayMap;
 import net.minecraft.client.Minecraft;
 import net.minecraft.core.registries.BuiltInRegistries;
@@ -9,7 +10,6 @@ import net.minecraft.network.protocol.game.ServerboundContainerClosePacket;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.world.inventory.AbstractContainerMenu;
 import net.minecraft.world.inventory.ClickType;
-import net.minecraft.world.inventory.CraftingMenu;
 import net.minecraft.world.item.Item;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.Items;
@@ -338,7 +338,7 @@ public class ShopExecutor {
 
     private void doWaitOpen(Minecraft client) {
         if (!checkPlayer(client)) return;
-        int size = getContainerSize(client.player.containerMenu);
+        int size = ContainerUtils.getContainerSize(client.player.containerMenu);
         if (size > 0) {
             lastContainerId = client.player.containerMenu.containerId;
             pageCount = 0;
@@ -358,7 +358,7 @@ public class ShopExecutor {
     private void doScanPage(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int size = getContainerSize(menu);
+        int size = ContainerUtils.getContainerSize(menu);
         if (size < 0) {
             error("Shop container closed unexpectedly");
             return;
@@ -432,7 +432,7 @@ public class ShopExecutor {
     private void doWaitDetail(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int size = getContainerSize(menu);
+        int size = ContainerUtils.getContainerSize(menu);
         if (size < 0) {
             error("Container closed after clicking item");
             return;
@@ -460,7 +460,7 @@ public class ShopExecutor {
     private void doScanAction(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int size = getContainerSize(menu);
+        int size = ContainerUtils.getContainerSize(menu);
         if (size < 0) {
             error("Container closed in detail view");
             return;
@@ -511,7 +511,7 @@ public class ShopExecutor {
     private void doExitMenu(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
-        int size = getContainerSize(menu);
+        int size = ContainerUtils.getContainerSize(menu);
 
         if (size > 0) {
             // Try "退出交易" first, then "返回", then force-close
@@ -541,7 +541,7 @@ public class ShopExecutor {
         if (tickCounter >= WAIT_TICKS) {
             // Ensure container is fully closed
             if (client.player.containerMenu != null
-                && getContainerSize(client.player.containerMenu) > 0) {
+                && ContainerUtils.getContainerSize(client.player.containerMenu) > 0) {
                 closeContainer();
             }
             state = State.DONE;
@@ -714,38 +714,19 @@ public class ShopExecutor {
         }
     }
 
-    /**
-     * Returns the number of container-specific slots, or -1 if not a storage container.
-     */
-    private static int getContainerSize(AbstractContainerMenu menu) {
-        if (menu == null) return -1;
-        if (menu instanceof CraftingMenu) return -1;
-        int total = menu.slots.size();
-        if (total <= 36) return -1;
-        return total - 36;
-    }
+    // getContainerSize and getContainerStateId are now in ContainerUtils (shared utility).
 
     /**
      * Clicks a slot with PICKUP action.
      */
     private void clickSlot(Minecraft client, int slotIndex) {
         if (client.player == null || client.player.connection == null) return;
-        int stateId = getContainerStateId(client.player.containerMenu);
+        int stateId = ContainerUtils.getContainerStateId(client.player.containerMenu);
         client.player.connection.send(
             new ServerboundContainerClickPacket(
                 lastContainerId, stateId, slotIndex, 0,
                 ClickType.PICKUP, ItemStack.EMPTY, new Int2ObjectArrayMap<>()
             )
         );
-    }
-
-    private static int getContainerStateId(AbstractContainerMenu menu) {
-        try {
-            java.lang.reflect.Field field = menu.getClass().getDeclaredField("stateId");
-            field.setAccessible(true);
-            return field.getInt(menu);
-        } catch (Exception e) {
-            return 0;
-        }
     }
 }

@@ -367,51 +367,7 @@ public class CcraftCommand {
         return BuiltInRegistries.ITEM.get(id);
     }
 
-    // ==================== Duration parsing ====================
-
-    /**
-     * Parses a duration string into ticks.
-     * Supported formats:
-     * <ul>
-     *   <li>{@code "3s"} or {@code "3"} — seconds (×20)</li>
-     *   <li>{@code "30t"} — raw ticks</li>
-     *   <li>{@code "1m"} — minutes (×1200)</li>
-     *   <li>{@code "500ms"} — milliseconds (/50, min 1 tick)</li>
-     * </ul>
-     *
-     * @return ticks, or -1 if unparseable
-     */
-    private static int parseDuration(String input) {
-        input = input.trim().toLowerCase();
-        if (input.isEmpty()) return -1;
-
-        try {
-            if (input.endsWith("ms")) {
-                int ms = Integer.parseInt(input.substring(0, input.length() - 2));
-                return Math.max(1, ms / 50);
-            }
-            if (input.endsWith("s")) {
-                return Integer.parseInt(input.substring(0, input.length() - 1)) * 20;
-            }
-            if (input.endsWith("t")) {
-                return Integer.parseInt(input.substring(0, input.length() - 1));
-            }
-            if (input.endsWith("m")) {
-                return Integer.parseInt(input.substring(0, input.length() - 1)) * 60 * 20;
-            }
-            // Plain number: treat as seconds
-            return Integer.parseInt(input) * 20;
-        } catch (NumberFormatException e) {
-            return -1;
-        }
-    }
-
-    /** Convert duration ticks to a human-readable string for feedback. */
-    private static String formatDuration(int ticks) {
-        if (ticks % 1200 == 0) return (ticks / 1200) + "m";
-        if (ticks % 20 == 0) return (ticks / 20) + "s";
-        return ticks + "t";
-    }
+    // Duration parsing / formatting delegated to CtimerCommand (canonical implementation).
 
     // ==================== Color parsing ====================
 
@@ -695,7 +651,7 @@ public class CcraftCommand {
 
     /** Show with custom duration, default colors. */
     private static int showHighlight(FabricClientCommandSource source, String durationStr) {
-        int ticks = parseDuration(durationStr);
+        int ticks = CtimerCommand.parseDuration(durationStr);
         if (ticks < 0) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
             return 0;
@@ -708,7 +664,7 @@ public class CcraftCommand {
 
     /** Show with custom duration + station color, default input/output colors. */
     private static int showHighlight(FabricClientCommandSource source, String durationStr, String stationColorStr) {
-        int ticks = parseDuration(durationStr);
+        int ticks = CtimerCommand.parseDuration(durationStr);
         if (ticks < 0) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
             return 0;
@@ -726,7 +682,7 @@ public class CcraftCommand {
     /** Show with custom duration + station + input colors, default output color. */
     private static int showHighlight(FabricClientCommandSource source, String durationStr,
                                       String stationColorStr, String inputColorStr) {
-        int ticks = parseDuration(durationStr);
+        int ticks = CtimerCommand.parseDuration(durationStr);
         if (ticks < 0) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
             return 0;
@@ -748,7 +704,7 @@ public class CcraftCommand {
     /** Show with custom duration + all three colors. */
     private static int showHighlight(FabricClientCommandSource source, String durationStr,
                                       String stationColorStr, String inputColorStr, String outputColorStr) {
-        int ticks = parseDuration(durationStr);
+        int ticks = CtimerCommand.parseDuration(durationStr);
         if (ticks < 0) {
             source.sendFeedback(Component.translatable("client-tools.ccraft.show_duration_invalid", durationStr));
             return 0;
@@ -779,7 +735,7 @@ public class CcraftCommand {
             return 0;
         }
         CcraftHighlightRenderer.trigger(ticks, stationColor, inputColor, outputColor);
-        String durStr = formatDuration(ticks);
+        String durStr = CtimerCommand.formatDuration(ticks);
         String sCol = formatColor(stationColor);
         String iCol = formatColor(inputColor);
         String oCol = formatColor(outputColor);

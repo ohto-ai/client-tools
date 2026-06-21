@@ -102,7 +102,7 @@ public class RecipeChainAnalyzer {
         HolderLookup.Provider registryAccess
     ) {
         if (sourceItem == productItem) {
-            return new RecipeChain(Collections.emptyList());
+            return new RecipeChain(List.of());
         }
 
         // Step 1: Build adjacency map — for each item, list what it can be crafted into

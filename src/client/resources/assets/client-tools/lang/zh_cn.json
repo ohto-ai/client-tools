@@ -497,5 +497,19 @@
   "client-tools.shop.sell_start": "§a§l开始出售 §e%s §a× §e%s§a...",
   "client-tools.shop.buy_done": "§a购买完成! §e%s §a× §e%s",
   "client-tools.shop.sell_done": "§a出售完成! §e%s §a× §e%s",
-  "client-tools.shop.error": "§c/cbuy/csell 错误: %s"
+  "client-tools.shop.error": "§c/cbuy/csell 错误: %s",
+
+  "client-tools.csweep.antiground_status": "§6反惩罚地板: %s§7 | 方块: §e%s",
+  "client-tools.csweep.antiground_on": "§a反惩罚地板已开启。§7扫掠时将 Y 坐标下调 0.5，站在站点下方的方块上，使用 §e%s§7。",
+  "client-tools.csweep.antiground_off": "§e反惩罚地板已关闭。",
+  "client-tools.csweep.antiground_already_on": "§7反惩罚地板本已开启。",
+  "client-tools.csweep.antiground_already_off": "§7反惩罚地板本已关闭。",
+  "client-tools.csweep.antiground_running": "§c无法在扫掠运行期间切换反惩罚地板。请先停止扫掠。",
+  "client-tools.csweep.antiground_block_set": "§a地板方块已设为: §e%s",
+  "client-tools.csweep.antiground_block_invalid": "§c无效的方块ID: %s。示例: minecraft:redstone_ore, minecraft:stone",
+  "client-tools.csweep.antiground_blacklist_hint": "§d⚑ §7重要提醒: 请将 §e%s §7加入投影打印机的黑名单，避免地板路径被挖掉！",
+  "client-tools.csweep.antiground_no_item": "§c⚠ 反惩罚地板已开启，但背包中没有 §e%s§c。无法放置地板方块。",
+
+  "client-tools.csweep.help.antiground": "§e/csweep antiground [on|off]  §7切换反惩罚地板路径。在站点下方铺设方块路径，使玩家始终站在实体方块上，消除浮空挖掘惩罚。\n  §f/csweep antiground block <方块ID> §7— 设置地板方块类型（默认: minecraft:redstone_ore）",
+  "client-tools.csweep.help.antiground_detail": "§6子命令: antiground\n§7切换反惩罚地板路径功能。开启后，扫掠会：\n  §7- 将玩家 Y 坐标下调 0.5，使脚站在站点下方的方块表面\n  §7- 尝试在站点下方放置地板方块（需要背包中有对应方块）\n  §7- 经过后右键点击清理地板方块\n§7子命令:\n  §fon§7/§foff §7— 开启/关闭\n  §fblock <注册ID> §7— 选择地板方块（默认: §f§nminecraft:redstone_ore§r§7）\n§7默认方块: §f§nminecraft:redstone_ore §r§7— 右键点击会触发发光/更新。\n§7其他推荐: §fobserver§7（放置时自动检测），§fstone§7（材料便宜）\n§7§d⚠ 请将此方块加入打印机黑名单，避免扫掠过程中被挖掉。"
 }

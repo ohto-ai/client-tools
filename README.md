@@ -29,7 +29,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides six practical automation tools:
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides six practical automation tools:**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -37,6 +37,8 @@ Support Minecraft 1.21～1.21.8
 - **`/cfly`** — Flight toggle with jump and status display
 - **`/csweep`** — Snake-pattern area traversal for automated clearing (works with Litematica-printer)
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
+- **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
+- **`/cplacement`** — Move Litematica schematic placement along individual axes
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -44,7 +46,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供六个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供八个实用工具：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -52,6 +54,8 @@ All features run entirely on the client side. No server-side installation is req
 - **`/cfly`** — 飞行开关，支持起跳和状态查看
 - **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机实现区域清空
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
+- **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
+- **`/cplacement`** — 沿轴向移动 Litematica 投影位置
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -106,7 +110,7 @@ All features run entirely on the client side. No server-side installation is req
 - **Sub-region skip** — skip to the next Litematica sub-region with `/csweep next`
 - Live speed adjustment — change flight speed mid-operation
 - Progress bar with ETA in status display
-- Designed to work alongside projection printers and auto-mining mods
+- **Anti-penalty floor (`/csweep antiground`)** — client-side ghost block path below stations eliminates the floating mining penalty; auto flight toggle on descent for smooth layer transitions; configurable block type (default: redstone ore)
 
 ### `/cchat` — Quick Chat Sender
 
@@ -250,6 +254,10 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 **Smooth movement:** The sweep no longer stops at each station. The player moves continuously along the path at constant speed with linear interpolation between waypoints — faster and more natural.
 
 **Litematica integration:** Litematica sync is enabled by default. If Litematica is installed and a schematic is loaded, the sweep area automatically syncs to the schematic's sub-regions. Each sub-region is swept sequentially. Setting manual `pos1`/`pos2` auto-disables the sync. Use `/csweep litematica` to view detected regions and their coordinates.
+
+**Anti-penalty floor:** `/csweep antiground on` enables a ghost block strip below the sweep path. The player stands on these blocks during horizontal movement, eliminating the floating mining penalty. Flight automatically toggles ON during vertical descents to avoid TP loops, then OFF on the next layer. Uses client-side ghost blocks (no items consumed). Configure block type with `/csweep antiground block <id>` (default: `minecraft:redstone_ore`). Remember to blacklist this block in your printer!
+
+**Shop automation:** `/cbuy <item> <count>` and `/csell <item> <count>` automate GUI-based shop transactions. Supports Chinese item names and Minecraft IDs. `/cplacement x|y|z <amount>` moves Litematica placements.
 
 **Mid-sweep recovery & real-time tracking:** `/csweep nearest` toggles real-time nearest station tracking. When enabled, the nearest station updates as you move, with path direction arrows showing the sweep direction at that station. Move around to find the best starting point, then `/csweep start` to begin from there. The executor flies you smoothly to the target station — no instant teleport. `/csweep nearest` again to turn off tracking. If a paused state exists, using `/csweep nearest` clears it (you're choosing a new start point).
 

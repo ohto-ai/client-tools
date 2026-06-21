@@ -47,6 +47,8 @@ public class SweepState {
     private static boolean blockageDetection = true;
     private static boolean blockageStop = false;
     private static Mode mode = Mode.MINING;
+    private static boolean antiPenaltyFloor = false;
+    private static String floorBlockId = "minecraft:redstone_ore";
     private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -73,6 +75,8 @@ public class SweepState {
         Boolean blockageDetection; // boxed so missing (old config) defaults to true
         Boolean blockageStop;      // boxed so missing (old config) defaults to false
         String mode;               // "MINING" or "DRAIN" — missing defaults to MINING
+        Boolean antiPenaltyFloor;  // boxed so missing (old config) defaults to false
+        String floorBlockId;       // registry ID, missing defaults to minecraft:redstone_ore
     }
 
     @SuppressWarnings("unused")
@@ -131,6 +135,8 @@ public class SweepState {
             blockageDetection = true;
             blockageStop = false;
             mode = Mode.MINING;
+            antiPenaltyFloor = false;
+            floorBlockId = "minecraft:redstone_ore";
             invalidateCache();
             load();
             loaded = true;
@@ -255,6 +261,12 @@ public class SweepState {
     public static void setBlockageDetection(boolean v) { ensureLoaded(); blockageDetection = v; save(); }
     public static void setBlockageStop(boolean v) { ensureLoaded(); blockageStop = v; save(); }
 
+    public static boolean isAntiPenaltyFloor() { ensureLoaded(); return antiPenaltyFloor; }
+    public static void setAntiPenaltyFloor(boolean v) { ensureLoaded(); antiPenaltyFloor = v; save(); }
+
+    public static String getFloorBlockId() { ensureLoaded(); return floorBlockId; }
+    public static void setFloorBlockId(String id) { ensureLoaded(); floorBlockId = id; save(); }
+
     // --- Pause state (persisted) ---
 
     public static void savePauseStationIndex(int stationIndex) {
@@ -362,6 +374,8 @@ public class SweepState {
         blockageDetection = true;
         blockageStop = false;
         mode = Mode.MINING;
+        antiPenaltyFloor = false;
+        floorBlockId = "minecraft:redstone_ore";
         areaVersion++;
         invalidateCache();
         save();
@@ -390,6 +404,8 @@ public class SweepState {
         data.blockageDetection = blockageDetection;
         data.blockageStop = blockageStop;
         data.mode = mode.name();
+        data.antiPenaltyFloor = antiPenaltyFloor;
+        data.floorBlockId = floorBlockId;
 
         try {
             Files.createDirectories(path.getParent());
@@ -421,6 +437,8 @@ public class SweepState {
             avoidWater = data.avoidWater != null ? data.avoidWater : true;
             blockageDetection = data.blockageDetection != null ? data.blockageDetection : true;
             blockageStop = data.blockageStop != null ? data.blockageStop : false;
+            antiPenaltyFloor = data.antiPenaltyFloor != null ? data.antiPenaltyFloor : false;
+            floorBlockId = data.floorBlockId != null ? data.floorBlockId : "minecraft:redstone_ore";
             if (data.mode != null) {
                 try { mode = Mode.valueOf(data.mode); } catch (IllegalArgumentException e) { mode = Mode.MINING; }
             } else {

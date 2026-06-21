@@ -135,6 +135,14 @@ public class SweepExecutor {
     private static final int DRAIN_SAND_THRESHOLD = 64;      // 1 stack
     private static final int DRAIN_MAX_RESTOCK_RETRIES = 3;
 
+    // Anti-penalty floor
+    private enum FloorFlightState { IDLE, FLIGHT_OFF, DESCENDING }
+    private record FloorEntry(BlockPos pos, int globalStationIndex) {}
+    private final List<FloorEntry> floorEntries = new ArrayList<>();
+    private int floorCleanupIdx = 0;
+    private FloorFlightState floorFlightState = FloorFlightState.IDLE;
+    private int floorLandingTicks = 0;
+
     // Movement-block detection (server rejected the position packet)
     private Vec3 lastSentPosition = null;
     private int blockedTicks = 0;
@@ -284,6 +292,12 @@ public class SweepExecutor {
         totalStations = 0;
         for (RegionData reg : regions) totalStations += reg.stationCount();
 
+        // Anti-penalty floor: build floor path and pre-fill ALL ghost blocks
+        if (SweepState.isAntiPenaltyFloor()) {
+            buildGlobalFloorPath();
+            fillAllFloorBlocks(Minecraft.getInstance());
+        }
+
         // If a nearest station was selected, start from there
         if (nearestGlobalStationIndex >= 0 && nearestGlobalStationIndex < totalStations) {
             int saved = nearestGlobalStationIndex;
@@ -369,6 +383,9 @@ public class SweepExecutor {
     }
 
     public void stop() {
+        if (SweepState.isAntiPenaltyFloor()) {
+            cleanupAllFloorBlocks(Minecraft.getInstance());
+        }
         state = State.IDLE;
         resetPath();
         resetApproach();
@@ -432,6 +449,11 @@ public class SweepExecutor {
         buildAllRegionPaths(subRegions);
         totalStations = 0;
         for (RegionData reg : regions) totalStations += reg.stationCount();
+
+        if (SweepState.isAntiPenaltyFloor()) {
+            buildGlobalFloorPath();
+            fillAllFloorBlocks(Minecraft.getInstance());
+        }
 
         int savedGlobalStation = SweepState.getSavedStationIndex();
         if (savedGlobalStation < 0 || savedGlobalStation >= totalStations) {
@@ -937,6 +959,12 @@ public class SweepExecutor {
             }
         }
 
+        // Anti-penalty floor: brief pause after descent for server onGround to stabilize
+        if (SweepState.isAntiPenaltyFloor() && floorLandingTicks > 0) {
+            floorLandingTicks--;
+            return; // skip movement for a few ticks
+        }
+
         if (state == State.APPROACHING) {
             doApproach(client);
         } else {
@@ -952,6 +980,13 @@ public class SweepExecutor {
     // --- APPROACHING (smooth fly-in to path start) ---
 
     private void doApproach(Minecraft client) {
+        // Anti-penalty floor: pre-clean ghost blocks below if approaching downward
+        if (SweepState.isAntiPenaltyFloor()
+            && approachTarget != null && approachOrigin != null
+            && approachTarget.y < approachOrigin.y - 0.3) {
+            cleanupFloorBlocksBelow(client, approachOrigin, approachTarget);
+        }
+
         // Track movement blockage so the approach phase also pauses
         // when the server rejects position packets.
         boolean movementBlocked = checkMovementBlocked(client);
@@ -971,6 +1006,11 @@ public class SweepExecutor {
         // desync from the player's actual position (same as doMove).
         double step = movementBlocked ? 0.0 : effectiveSpeed / 20.0;
         approachTraveled += step;
+
+        // Clean up ghost floor blocks behind the player during approach
+        if (SweepState.isAntiPenaltyFloor()) {
+            cleanupPassedFloorBlocks(client.player.position(), client);
+        }
 
         if (approachTraveled >= approachDistance) {
             // Arrived — snap to target and transition to MOVING
@@ -1006,6 +1046,42 @@ public class SweepExecutor {
         if (segments.isEmpty()) {
             finish();
             return;
+        }
+
+        // Anti-penalty floor: flight toggle state machine
+        //  IDLE → FLIGHT_OFF  (first horizontal segment: disable flight)
+        //  FLIGHT_OFF → DESCENDING (vertical descent: enable flight)
+        //  DESCENDING → FLIGHT_OFF (back to horizontal: disable flight + pause)
+        if (SweepState.isAntiPenaltyFloor()) {
+            int preSegIdx = findSegment(distanceTraveled);
+            if (preSegIdx < segments.size()) {
+                PathSegment seg = segments.get(preSegIdx);
+                boolean isDescent = seg.end.y < seg.start.y - 0.3;
+
+                switch (floorFlightState) {
+                    case IDLE -> {
+                        if (!isDescent) {
+                            setFlight(client, false);
+                            floorLandingTicks = 5;
+                            floorFlightState = FloorFlightState.FLIGHT_OFF;
+                        }
+                    }
+                    case FLIGHT_OFF -> {
+                        if (isDescent) {
+                            setFlight(client, true);
+                            cleanupFloorBlocksBelow(client, seg.start, seg.end);
+                            floorFlightState = FloorFlightState.DESCENDING;
+                        }
+                    }
+                    case DESCENDING -> {
+                        if (!isDescent) {
+                            setFlight(client, false);
+                            floorLandingTicks = 5;
+                            floorFlightState = FloorFlightState.FLIGHT_OFF;
+                        }
+                    }
+                }
+            }
         }
 
         // Check whether the server rejected our last movement BEFORE
@@ -1047,6 +1123,11 @@ public class SweepExecutor {
         // Determine which segment we're now in (may have changed after the step)
         segIdx = findSegment(distanceTraveled);
         currentStationIndex = segIdx + 1; // next station we're heading toward
+
+        // Anti-penalty floor: cleanup ghost blocks behind the player
+        if (SweepState.isAntiPenaltyFloor()) {
+            cleanupPassedFloorBlocks(client.player.position(), client);
+        }
 
         // Interpolate position along this segment
         PathSegment seg = segments.get(segIdx);
@@ -1263,7 +1344,7 @@ public class SweepExecutor {
      * stays within mining reach of any solid bottom below the water.
      */
     private Vec3 avoidWater(Minecraft client, Vec3 pos) {
-        if (!SweepState.isAutoSpeed() || !SweepState.isAvoidWater()
+        if (!SweepState.isAvoidWater()
             || client.level == null || client.player == null) return pos;
 
         double eyeHeight = client.player.getEyeHeight();
@@ -1587,6 +1668,9 @@ public class SweepExecutor {
                     // Skip liquids — water, lava, and other fluids can't be "mined"
                     if (!state.getFluidState().isEmpty()) continue;
 
+                    // Skip anti-penalty floor ghost blocks — they are intentionally placed
+                    if (SweepState.isAntiPenaltyFloor() && isFloorBlock(bp)) continue;
+
                     // Skip unbreakable blocks (bedrock, barrier, command blocks, etc.)
                     // getDestroySpeed returns -1 for unbreakable blocks
                     float destroySpeed = state.getDestroySpeed(client.level, bp);
@@ -1642,15 +1726,235 @@ public class SweepExecutor {
         RegionData reg = regions.get(index);
         stationPath.clear();
         stationPath.addAll(reg.stations());
-        segments.clear();
-        segments.addAll(reg.segments());
-        cumulativeDist.clear();
-        cumulativeDist.addAll(reg.cumulativeDist());
-        totalPathLength = reg.totalLength();
+        // Anti-penalty: offset stations down 0.5 so player stands on floor
+        if (SweepState.isAntiPenaltyFloor()) {
+            for (int i = 0; i < stationPath.size(); i++) {
+                Vec3 orig = stationPath.get(i);
+                stationPath.set(i, new Vec3(orig.x, orig.y - 0.5, orig.z));
+            }
+            // Rebuild segments from adjusted stations so doMove() uses correct Y
+            segments.clear();
+            cumulativeDist.clear();
+            cumulativeDist.add(0.0);
+            double cum = 0.0;
+            for (int i = 0; i < stationPath.size() - 1; i++) {
+                PathSegment seg = new PathSegment(stationPath.get(i), stationPath.get(i + 1));
+                segments.add(seg);
+                cum += seg.length;
+                cumulativeDist.add(cum);
+            }
+            totalPathLength = cum;
+        } else {
+            segments.clear();
+            segments.addAll(reg.segments());
+            cumulativeDist.clear();
+            cumulativeDist.addAll(reg.cumulativeDist());
+            totalPathLength = reg.totalLength();
+        }
         distanceTraveled = 0.0;
         currentStationIndex = 1; // heading to first station of this region
         errorMessage = "";
         return true;
+    }
+
+    // ==================== Anti-penalty floor ====================
+
+    /**
+     * Builds the global floor path — fills the ENTIRE continuous strip below
+     * the sweep path, not just individual stations.  Uses segment-level
+     * interpolation to ensure blocks are connected.
+     *
+     * <p>Floor = (stationX, stationY-1, stationZ).  Vertical transitions are
+     * excluded (no floor on stair-step segments).
+     */
+    private void buildGlobalFloorPath() {
+        floorEntries.clear();
+        floorCleanupIdx = 0;
+        
+        // Build virtual segments from concatenated stations so we can interpolate
+        List<Vec3> allStations = getFullConcatPath();
+        if (allStations.size() < 2) return;
+
+        java.util.LinkedHashSet<BlockPos> seen = new java.util.LinkedHashSet<>();
+
+        for (int i = 0; i < allStations.size() - 1; i++) {
+            Vec3 cur = allStations.get(i);
+            Vec3 next = allStations.get(i + 1);
+
+            // Skip vertical transitions — no floor on stair steps
+            if (Math.abs(cur.y - next.y) > 1.0) continue;
+
+            // Floor block centers: floor is at (stationX, stationY-1, stationZ)
+            // center at (stationX+0.5, stationY-0.5, stationZ+0.5)
+            Vec3 fc = new Vec3(Math.floor(cur.x) + 0.5,
+                               Math.floor(cur.y) - 0.5,
+                               Math.floor(cur.z) + 0.5);
+            Vec3 fn = new Vec3(Math.floor(next.x) + 0.5,
+                               Math.floor(next.y) - 0.5,
+                               Math.floor(next.z) + 0.5);
+
+            // Interpolate: one block per step along the floor center path
+            double dist = fc.distanceTo(fn);
+            int steps = Math.max(1, (int) Math.ceil(dist));
+            for (int s = 0; s <= steps; s++) {
+                double t = (double) s / steps;
+                double px = fc.x + (fn.x - fc.x) * t;
+                double py = fc.y + (fn.y - fc.y) * t;
+                double pz = fc.z + (fn.z - fc.z) * t;
+                BlockPos fb = new BlockPos((int) Math.floor(px),
+                                           (int) Math.floor(py),
+                                           (int) Math.floor(pz));
+                seen.add(fb);
+            }
+        }
+
+        // Convert to ordered list with global station index tracking
+        int globalIdx = 0;
+        for (BlockPos pos : seen) {
+            floorEntries.add(new FloorEntry(pos, globalIdx));
+            globalIdx++;
+        }
+    }
+
+    /**
+     * Pre-fills the entire floor path with ghost blocks, all at once.
+     * Uses client-side-only {@code level.setBlock(pos, state, 18)} —
+     * same technique as clientcommands' cghostblock. No server packets, no items consumed.
+     */
+    private void fillAllFloorBlocks(Minecraft client) {
+        if (client.level == null || floorEntries.isEmpty()) return;
+
+        var rl = net.minecraft.resources.ResourceLocation.tryParse(SweepState.getFloorBlockId());
+        if (rl == null) return;
+        var block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
+        if (block == net.minecraft.world.level.block.Blocks.AIR) return;
+        var state = block.defaultBlockState();
+
+        // Flag 18 = 2 (render update) | 16 (moving / suppress server validation)
+        for (FloorEntry entry : floorEntries) {
+            var existing = client.level.getBlockState(entry.pos());
+            if (existing.isAir()) {
+                client.level.setBlock(entry.pos(), state, 18);
+            }
+        }
+    }
+
+    /**
+     * Removes a ghost block by setting it back to air on the client.
+     * Ghost blocks are purely client-side, so no server packet is needed —
+     * the server already sees air at this position. Flag 18 = 2|16 suppresses
+     * server validation while triggering a render update.
+     */
+    private void cleanupFloorBlock(BlockPos pos, Minecraft client) {
+        if (client.level == null) return;
+        // Only clean up positions that are still our ghost floor block
+        // (real blocks placed by the server/printer should be left alone)
+        var existing = client.level.getBlockState(pos);
+        if (existing.isAir()) return; // already clean
+
+        // Resolve the configured block to check if this is our ghost block
+        var rl = net.minecraft.resources.ResourceLocation.tryParse(SweepState.getFloorBlockId());
+        if (rl == null) return;
+        var block = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
+        if (block == net.minecraft.world.level.block.Blocks.AIR) return;
+
+        // Only remove if it matches our configured floor block type
+        if (!existing.is(block)) return;
+
+        // Client-side removal — same flag as placement
+        client.level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 18);
+    }
+
+    /**
+     * Cleans up ghost blocks behind the player.  Uses distance-based safety:
+     * only cleans entries whose floor center is at least {@code safeDist}
+     * behind the player's current position.  This ensures the block directly
+     * under the player's feet is never targeted.
+     */
+    private void cleanupPassedFloorBlocks(Vec3 playerPos, Minecraft client) {
+        double safeDist = Math.max(SweepState.getRadius() * 2.0, 3.0);
+        while (floorCleanupIdx < floorEntries.size()) {
+            BlockPos fp = floorEntries.get(floorCleanupIdx).pos();
+            Vec3 fc = new Vec3(fp.getX() + 0.5, fp.getY() + 0.5, fp.getZ() + 0.5);
+            if (playerPos.distanceToSqr(fc) > safeDist * safeDist) {
+                cleanupFloorBlock(fp, client);
+                floorCleanupIdx++;
+            } else {
+                break; // still too close — stop cleaning
+            }
+        }
+    }
+
+    /** Clean up all remaining floor blocks (called on stop/finish). */
+    private void cleanupAllFloorBlocks(Minecraft client) {
+        while (floorCleanupIdx < floorEntries.size()) {
+            cleanupFloorBlock(floorEntries.get(floorCleanupIdx).pos(), client);
+            floorCleanupIdx++;
+        }
+    }
+
+    /**
+     * Disables flight (so the server stops applying the flying mining penalty)
+     * and waits a few ticks for the player to fall onto the ghost block surface.
+     */
+    /** Toggle player flight (server packet), avoiding TP-loop on descent. */
+    private void setFlight(Minecraft client, boolean enable) {
+        if (client.player == null || client.player.connection == null) return;
+        if (client.player.getAbilities().flying == enable) return;
+        client.player.getAbilities().flying = enable;
+        client.player.connection.send(
+            new net.minecraft.network.protocol.game.ServerboundPlayerAbilitiesPacket(
+                client.player.getAbilities()));
+    }
+
+    /**
+     * Pre-cleans ghost blocks in the vertical descent column and
+     * immediately below the player.  Scans from 1 block above the player's
+     * feet down to the target Y, removing any ghost floor blocks that match
+     * our configured floor type.  This prevents TP loops when the sweep
+     * transitions between Y layers.
+     */
+    private void cleanupFloorBlocksBelow(Minecraft client, Vec3 start, Vec3 end) {
+        if (client.level == null) return;
+
+        var rl = net.minecraft.resources.ResourceLocation.tryParse(SweepState.getFloorBlockId());
+        if (rl == null) return;
+        var floorBlock = net.minecraft.core.registries.BuiltInRegistries.BLOCK.get(rl);
+        if (floorBlock == net.minecraft.world.level.block.Blocks.AIR) return;
+
+        int bx = (int) Math.floor(start.x);
+        int bz = (int) Math.floor(start.z);
+
+        // Scan the column from above the player down to the end position.
+        // Stop at floor(end.y) so the new layer's floor blocks are PRESERVED.
+        int topY = (int) Math.floor(start.y) + 1;
+        int botY = (int) Math.floor(end.y);          // NOT end.y - 2 — preserve new floor!
+        for (int y = topY; y >= botY; y--) {
+            BlockPos pos = new BlockPos(bx, y, bz);
+            var state = client.level.getBlockState(pos);
+            if (state.is(floorBlock)) {
+                client.level.setBlock(pos, net.minecraft.world.level.block.Blocks.AIR.defaultBlockState(), 18);
+            }
+        }
+        // Note: do NOT advance floorCleanupIdx here — the new layer's start
+        // blocks may fall within this column and must NOT be skipped.
+        // cleanupPassedFloorBlocks handles all floorCleanupIdx advancement
+        // based on actual distance from the player.
+    }
+
+    /** Checks whether a block position belongs to the antiground floor path. */
+    private boolean isFloorBlock(BlockPos pos) {
+        for (FloorEntry e : floorEntries) {
+            if (e.pos().equals(pos)) return true;
+        }
+        return false;
+    }
+
+    private void resetFloorPath() {
+        floorEntries.clear();
+        floorCleanupIdx = 0;
+                floorFlightState = FloorFlightState.IDLE;
+        floorLandingTicks = 0;
     }
 
     // --- Completion ---
@@ -1694,6 +1998,9 @@ public class SweepExecutor {
             }
             // Continue in MOVING state — doMove handles the next region seamlessly
         } else {
+            if (SweepState.isAntiPenaltyFloor()) {
+                cleanupAllFloorBlocks(Minecraft.getInstance());
+            }
             state = State.DONE;
             currentStationIndex = totalStations;
             SweepState.setRunning(false);
@@ -1721,6 +2028,7 @@ public class SweepExecutor {
         globalStationOffset = 0;
         completedRegionsLength = 0.0;
         totalAllRegionsLength = 0.0;
+        resetFloorPath();
     }
 
     private void resetApproach() {

@@ -6,7 +6,6 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
-import java.util.Collections;
 import java.util.Comparator;
 import java.util.List;
 import java.util.stream.Stream;
@@ -52,7 +51,7 @@ public class CsequenceState {
      */
     public static List<String> listSequences() {
         Path dir = getSequencesDir();
-        if (!Files.exists(dir)) return Collections.emptyList();
+        if (!Files.exists(dir)) return List.of();
 
         List<String> names = new ArrayList<>();
         try (Stream<Path> files = Files.list(dir)) {
@@ -63,7 +62,7 @@ public class CsequenceState {
                     names.add(name.substring(0, name.length() - ".mcfunction".length()));
                 });
         } catch (IOException ignored) {
-            return Collections.emptyList();
+            return List.of();
         }
         names.sort(Comparator.naturalOrder());
         return names;
