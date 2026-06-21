@@ -141,6 +141,13 @@
   "client-tools.csweep.blockdetect_auto_on": "§aBlockage detection auto-enabled.",
   "client-tools.csweep.status_blockdetect": "§aBlockage Det: %s §7[%s§7]",
   "client-tools.csweep.status_avoidwater": "§aAvoid Water: %s",
+  "client-tools.csweep.status_mode": "§aMode: %s",
+
+  "client-tools.csweep.mode_show": "§aCurrent mode: %s",
+  "client-tools.csweep.mode_already": "§7Mode is already: §e%s",
+  "client-tools.csweep.mode_mining": "§aMode set to §eMining Assist §a(MINING).",
+  "client-tools.csweep.mode_drain": "§aMode set to §bDrain Assist §a(DRAIN). §7Will auto-buy sand from shop when below 1 stack.",
+  "client-tools.csweep.mode_running": "§cCannot change mode while sweep is running. Stop the sweep first.",
 
   "client-tools.csweep.show_outline_on": "§aOutline highlight enabled.",
   "client-tools.csweep.show_outline_off": "§eOutline highlight disabled.",
@@ -403,6 +410,7 @@
   "client-tools.csweep.help.autospeed": "§e/csweep autospeed [on|off]  §7Toggle adaptive speed based on block density ahead. Faster over air, slower through dense areas.",
   "client-tools.csweep.help.avoidwater": "§e/csweep avoidwater [on|off]  §7Toggle Y-level adjustment to stay out of water (avoids underwater mining speed penalty).",
   "client-tools.csweep.help.blockdetect": "§e/csweep blockdetect [on|off|wait|slow]  §7Toggle backward hemisphere blockage detection.\n  §fwait§7: stop and hover until blocks behind are cleared. §fslow§7: drop to min speed.",
+  "client-tools.csweep.help.mode": "§e/csweep mode [mining|drain]  §7Switch sweep mode.\n  §fmining§7: Mining assist (default) — movement-only sweep.\n  §fdrain§7: Drain assist — auto-detects low sand and buys from shop.",
   "client-tools.csweep.help.show": "§e/csweep show  §7Show display settings.\n  §fshow outline [on|off]§7 — toggle cuboid outline\n  §fshow path [on|off]§7 — toggle path lines\n  §fshow layer [on|off]§7 — toggle layer emphasis\n  §fshow dir [on|off]§7 — toggle nearest station direction line",
   "client-tools.csweep.help.litematica": "§e/csweep litematica [on|off|sync]  §7Configure Litematica area sync. Automatically uses Litematica's selection as the sweep area.",
   "client-tools.csweep.help.nearest": "§e/csweep nearest [on|off]  §7Toggle real-time nearest station tracking. Shows the closest unswept station and updates as you move.",
@@ -418,6 +426,7 @@
   "client-tools.csweep.help.autospeed_detail": "§6Subcommand: autospeed\n§7Toggles adaptive speed mode. When ON, speed automatically adjusts:\n§7  §aFast §7over empty areas (up to maxspeed)\n§7  §eSlow §7through dense blocks (down to speed/minimum)\n§7Toggle with no argument, or use §fon§7/§foff §7explicitly.",
   "client-tools.csweep.help.avoidwater_detail": "§6Subcommand: avoidwater\n§7Toggles water avoidance. When ON and auto-speed is active, the system adjusts Y-level to keep the player out of water, avoiding the underwater mining speed penalty.\n§7Toggle with no argument, or use §fon§7/§foff §7explicitly.",
   "client-tools.csweep.help.blockdetect_detail": "§6Subcommand: blockdetect\n§7Toggles backward hemisphere blockage detection. Scans blocks behind the player for unmined blocks (excluding liquids and unbreakable blocks like bedrock).\n§7Modes:\n  §fon§7/§foff §7— enable/disable detection\n  §fwait §7— stop and hover until blocks behind are cleared\n  §fslow §7— drop to minimum speed when unmined blocks detected",
+  "client-tools.csweep.help.mode_detail": "§6Subcommand: mode\n§7Switch the sweep operation mode.\n  §fmining §7— Mining assist (default): movement-only sweep, pair with other mining mods.\n  §fdrain §7— Drain assist: same as mining but monitors sand inventory. When sand drops below 1 stack (64), auto-pauses and buys sand via §e/cbuy sand all §7from the shop, then resumes.",
   "client-tools.csweep.help.show_detail": "§6Subcommand: show\n§7Controls visual overlay rendering:\n  §foutline [on|off]§7 — cuboid boundary box\n  §fpath [on|off]§7 — planned path lines\n  §flayer [on|off]§7 — emphasize current Y-layer\n  §fdir [on|off]§7 — direction line to nearest station\n§7Each toggle can be used without argument to flip, or with §fon§7/§foff§7.",
   "client-tools.csweep.help.litematica_detail": "§6Subcommand: litematica\n§7Syncs the sweep area with a Litematica schematic selection.\n  §fon§7 — enable sync (auto-detects sub-regions)\n  §foff§7 — disable sync (use manual pos1/pos2)\n  §fsync§7 — force re-sync from current Litematica selection\n§7Requires Litematica mod to be installed.",
   "client-tools.csweep.help.nearest_detail": "§6Subcommand: nearest\n§7Toggles real-time nearest station tracking. The system continuously finds the closest unswept station and shows its direction.\n§7Useful for finding the optimal starting point before running §e/csweep start§7.",
@@ -478,5 +487,16 @@
   "client-tools.cplacement.status_available": "§aavailable",
   "client-tools.cplacement.status_no_selection": "§eNo area selection active.",
   "client-tools.cplacement.status_regions": "§aSub-regions: §e%d",
-  "client-tools.cplacement.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]"
+  "client-tools.cplacement.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]",
+
+  "client-tools.shop.not_connected": "§cNot connected to a server.",
+  "client-tools.shop.unknown_item": "§cUnknown item: %s. Use item ID (e.g. minecraft:sand) or common name (e.g. sand).",
+  "client-tools.shop.count_invalid": "§cInvalid count: %s. Use a number or \"all\".",
+  "client-tools.shop.crafting_running": "§cCannot use shop while crafting is active.",
+  "client-tools.shop.already_running": "§cA shop operation is already running.",
+  "client-tools.shop.buy_start": "§a§lBuying §e%s §a× §e%s§a...",
+  "client-tools.shop.sell_start": "§a§lSelling §e%s §a× §e%s§a...",
+  "client-tools.shop.buy_done": "§aBuy complete! §e%s §a× §e%s",
+  "client-tools.shop.sell_done": "§aSell complete! §e%s §a× §e%s",
+  "client-tools.shop.error": "§c/cbuy/csell error: %s"
 }

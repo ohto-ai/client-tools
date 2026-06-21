@@ -70,7 +70,7 @@ public class CsweepCommand {
             String remaining = builder.getRemaining().toLowerCase();
             for (String s : new String[]{"pos1", "pos2", "radius", "speed", "maxspeed",
                 "show", "litematica", "nearest", "autospeed", "avoidwater", "blockdetect",
-                "next", "expand", "contract", "start", "stop", "pause", "status", "penalty", "reset"}) {
+                "mode", "next", "expand", "contract", "start", "stop", "pause", "status", "penalty", "reset"}) {
                 if (s.toLowerCase().startsWith(remaining)) {
                     builder.suggest(s);
                 }
@@ -201,6 +201,13 @@ public class CsweepCommand {
                         .executes(ctx -> setBlockageStop(ctx.getSource(), true)))
                     .then(literal("slow")
                         .executes(ctx -> setBlockageStop(ctx.getSource(), false))))
+                // ---- mode ----
+                .then(literal("mode")
+                    .executes(ctx -> showMode(ctx.getSource()))
+                    .then(literal("mining")
+                        .executes(ctx -> setMode(ctx.getSource(), SweepState.Mode.MINING)))
+                    .then(literal("drain")
+                        .executes(ctx -> setMode(ctx.getSource(), SweepState.Mode.DRAIN))))
                 // ---- next (skip to next sub-region) ----
                 .then(literal("next")
                     .executes(ctx -> skipToNextRegion(ctx.getSource())))
@@ -285,6 +292,9 @@ public class CsweepCommand {
             }
             case "blockdetect" -> {
                 source.sendFeedback(Component.translatable("client-tools.csweep.help.blockdetect_detail"));
+            }
+            case "mode" -> {
+                source.sendFeedback(Component.translatable("client-tools.csweep.help.mode_detail"));
             }
             case "show" -> {
                 source.sendFeedback(Component.translatable("client-tools.csweep.help.show_detail"));
@@ -721,6 +731,38 @@ public class CsweepCommand {
         return 1;
     }
 
+    // ==================== mode ====================
+
+    private static int showMode(FabricClientCommandSource source) {
+        SweepState.Mode mode = SweepState.getMode();
+        String modeName = mode == SweepState.Mode.DRAIN ? "§bDRAIN" : "§aMINING";
+        source.sendFeedback(Component.translatable("client-tools.csweep.mode_show", modeName));
+        return 1;
+    }
+
+    private static int setMode(FabricClientCommandSource source, SweepState.Mode newMode) {
+        SweepState.Mode current = SweepState.getMode();
+        if (current == newMode) {
+            String modeName = newMode == SweepState.Mode.DRAIN ? "DRAIN" : "MINING";
+            source.sendFeedback(Component.translatable("client-tools.csweep.mode_already", modeName));
+            return 1;
+        }
+
+        SweepExecutor executor = SweepExecutor.getInstance();
+        if (executor.isRunning() || executor.isPaused()) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.mode_running"));
+            return 0;
+        }
+
+        SweepState.setMode(newMode);
+        if (newMode == SweepState.Mode.DRAIN) {
+            source.sendFeedback(Component.translatable("client-tools.csweep.mode_drain"));
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.csweep.mode_mining"));
+        }
+        return 1;
+    }
+
     // ==================== radius / speed ====================
 
     private static int setRadius(FabricClientCommandSource source, int blocks) {
@@ -1000,6 +1042,8 @@ public class CsweepCommand {
                 : Component.translatable("client-tools.csweep.blockdetect_mode_slow").getString()));
         source.sendFeedback(Component.translatable("client-tools.csweep.status_avoidwater",
             SweepState.isAvoidWater() ? "§aON" : "§7OFF"));
+        source.sendFeedback(Component.translatable("client-tools.csweep.status_mode",
+            SweepState.getMode() == SweepState.Mode.DRAIN ? "§bDRAIN" : "§aMINING"));
 
         source.sendFeedback(Component.translatable("client-tools.csweep.status_show",
             SweepState.isShowOutline() ? "§aON" : "§7OFF",

@@ -1,6 +1,7 @@
 package indi.ohtoai.tool.client_tools.client.mixin;
 
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.shop.ShopExecutor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.client.player.LocalPlayer;
@@ -24,7 +25,7 @@ public class SuppressInteractionMixin {
     @Inject(method = "useItemOn", at = @At("HEAD"), cancellable = true)
     private void onUseItemOn(LocalPlayer player, InteractionHand hand, BlockHitResult result,
                              CallbackInfoReturnable<InteractionResult> cir) {
-        if (CraftingExecutor.getInstance().isRunning()) {
+        if (CraftingExecutor.getInstance().isRunning() || ShopExecutor.getInstance().isRunning()) {
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }
@@ -32,7 +33,7 @@ public class SuppressInteractionMixin {
     @Inject(method = "useItem", at = @At("HEAD"), cancellable = true)
     private void onUseItem(Player player, InteractionHand hand,
                            CallbackInfoReturnable<InteractionResult> cir) {
-        if (CraftingExecutor.getInstance().isRunning()) {
+        if (CraftingExecutor.getInstance().isRunning() || ShopExecutor.getInstance().isRunning()) {
             cir.setReturnValue(InteractionResult.FAIL);
         }
     }

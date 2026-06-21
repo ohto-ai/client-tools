@@ -141,6 +141,13 @@
   "client-tools.csweep.blockdetect_auto_on": "§a后方方块检测已自动开启。",
   "client-tools.csweep.status_blockdetect": "§a后方方块检测: %s §7[%s§7]",
   "client-tools.csweep.status_avoidwater": "§a避水模式: %s",
+  "client-tools.csweep.status_mode": "§a模式: %s",
+
+  "client-tools.csweep.mode_show": "§a当前模式: %s",
+  "client-tools.csweep.mode_already": "§7模式已为: §e%s",
+  "client-tools.csweep.mode_mining": "§a模式已切换至 §e挖掘辅助 §a(MINING)。",
+  "client-tools.csweep.mode_drain": "§a模式已切换至 §b排水辅助 §a(DRAIN)。§7系统将在背包沙子不足1组时自动从商店购买。",
+  "client-tools.csweep.mode_running": "§c无法在扫掠运行期间切换模式。请先停止扫掠。",
 
   "client-tools.csweep.show_outline_on": "§a已开启外框高亮。",
   "client-tools.csweep.show_outline_off": "§e已关闭外框高亮。",
@@ -402,6 +409,7 @@
   "client-tools.csweep.help.autospeed": "§e/csweep autospeed [on|off]  §7切换自适应速度（根据前方方块密度）。空旷区域加速，密集区域减速。",
   "client-tools.csweep.help.avoidwater": "§e/csweep avoidwater [on|off]  §7切换避水模式（调整 Y 坐标避开水体，消除水下挖掘减速惩罚）。",
   "client-tools.csweep.help.blockdetect": "§e/csweep blockdetect [on|off|wait|slow]  §7切换后方半球方块检测。\n  §fwait§7: 停止悬停等待后方方块被清除。§fslow§7: 降至最低速度。",
+  "client-tools.csweep.help.mode": "§e/csweep mode [mining|drain]  §7切换扫掠模式。\n  §fmining§7: 挖掘辅助（默认）— 纯移动扫掠。\n  §fdrain§7: 排水辅助 — 自动检测沙子不足并从商店购买。",
   "client-tools.csweep.help.show": "§e/csweep show  §7显示可视化设置。\n  §fshow outline [on|off]§7 — 切换立方体外框\n  §fshow path [on|off]§7 — 切换路径线\n  §fshow layer [on|off]§7 — 切换层级强调\n  §fshow dir [on|off]§7 — 切换最近站点方向线",
   "client-tools.csweep.help.litematica": "§e/csweep litematica [on|off|sync]  §7配置 Litematica 区域同步。自动使用 Litematica 的选区作为扫掠区域。",
   "client-tools.csweep.help.nearest": "§e/csweep nearest [on|off]  §7切换实时最近站点追踪。显示最近的未扫掠站点并随移动更新。",
@@ -417,6 +425,7 @@
   "client-tools.csweep.help.autospeed_detail": "§6子命令: autospeed\n§7切换自适应速度模式。开启后，速度自动调节：\n§7  §a快 §7— 空旷区域（可达 maxspeed）\n§7  §e慢 §7— 密集方块区域（降至 speed/最低值）\n§7不带参数切换，或使用 §fon§7/§foff §7显式指定。",
   "client-tools.csweep.help.avoidwater_detail": "§6子命令: avoidwater\n§7切换避水模式。开启且自动调速激活时，系统会调整 Y 坐标保持玩家在水面以上，避免水下挖掘减速惩罚。\n§7不带参数切换，或使用 §fon§7/§foff §7显式指定。",
   "client-tools.csweep.help.blockdetect_detail": "§6子命令: blockdetect\n§7切换后方半球方块检测。扫描玩家身后的方块是否有未挖掘的（排除液体和不可破坏方块如基岩）。\n§7模式:\n  §fon§7/§foff §7— 启用/禁用检测\n  §fwait §7— 停止悬停直到后方方块被清除\n  §fslow §7— 检测到未挖掘方块时降至最低速度",
+  "client-tools.csweep.help.mode_detail": "§6子命令: mode\n§7切换扫掠工作模式。\n  §fmining §7— 挖掘辅助（默认）：仅移动扫掠，适合配合其他挖矿模组。\n  §fdrain §7— 排水辅助：与挖掘辅助流程一致，但会检测背包沙子数量。当沙子少于1组(64个)时自动暂停，通过 §e/cbuy sand all §7从商店购买，然后恢复扫掠。",
   "client-tools.csweep.help.show_detail": "§6子命令: show\n§7控制可视化覆盖渲染:\n  §foutline [on|off]§7 — 立方体边界框\n  §fpath [on|off]§7 — 计划路径线\n  §flayer [on|off]§7 — 强调当前 Y 层\n  §fdir [on|off]§7 — 指向最近站点的方向线\n§7每个开关可无参切换，或用 §fon§7/§foff §7显式设置。",
   "client-tools.csweep.help.litematica_detail": "§6子命令: litematica\n§7将扫掠区域与 Litematica 原理图选区同步。\n  §fon§7 — 启用同步（自动检测子区域）\n  §foff§7 — 禁用同步（使用手动 pos1/pos2）\n  §fsync§7 — 强制从当前 Litematica 选区重新同步\n§7需要安装 Litematica 模组。",
   "client-tools.csweep.help.nearest_detail": "§6子命令: nearest\n§7切换实时最近站点追踪。系统持续寻找最近的未扫掠站点并显示其方向。\n§7适合在执行 §e/csweep start §7前寻找最佳起点。",
@@ -477,5 +486,16 @@
   "client-tools.cplacement.status_available": "§a可用",
   "client-tools.cplacement.status_no_selection": "§e没有活动的区域选择。",
   "client-tools.cplacement.status_regions": "§a子区域数: §e%d",
-  "client-tools.cplacement.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]"
+  "client-tools.cplacement.status_region": "§7   §e%d. §f%s §7[%d,%d,%d] → [%d,%d,%d]",
+
+  "client-tools.shop.not_connected": "§c未连接到服务器。",
+  "client-tools.shop.unknown_item": "§c未知物品: %s。请使用物品ID (如 minecraft:sand) 或中文名 (如 沙子)。",
+  "client-tools.shop.count_invalid": "§c无效的数量: %s。请使用数字或 \"all\"。",
+  "client-tools.shop.crafting_running": "§c无法在合成运行期间使用商店。",
+  "client-tools.shop.already_running": "§c已有商店操作在运行中。",
+  "client-tools.shop.buy_start": "§a§l开始购买 §e%s §a× §e%s§a...",
+  "client-tools.shop.sell_start": "§a§l开始出售 §e%s §a× §e%s§a...",
+  "client-tools.shop.buy_done": "§a购买完成! §e%s §a× §e%s",
+  "client-tools.shop.sell_done": "§a出售完成! §e%s §a× §e%s",
+  "client-tools.shop.error": "§c/cbuy/csell 错误: %s"
 }

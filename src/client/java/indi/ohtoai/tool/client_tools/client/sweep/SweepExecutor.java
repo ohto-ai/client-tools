@@ -4,7 +4,10 @@ import net.minecraft.client.Minecraft;
 import net.minecraft.core.BlockPos;
 import net.minecraft.network.chat.Component;
 import net.minecraft.network.protocol.game.ServerboundMovePlayerPacket;
+import indi.ohtoai.tool.client_tools.client.shop.ShopExecutor;
 import net.minecraft.tags.FluidTags;
+import net.minecraft.world.item.ItemStack;
+import net.minecraft.world.item.Items;
 import net.minecraft.world.level.block.Blocks;
 import net.minecraft.world.level.block.state.BlockState;
 import net.minecraft.world.phys.Vec3;
@@ -123,6 +126,14 @@ public class SweepExecutor {
     private int cachedBlockageCount = 0;
     private static final int BLOCKAGE_SCAN_INTERVAL = 10;    // scan every 10 ticks (2 Hz)
     private static final int BLOCKAGE_THRESHOLD = 2;         // min unmined blocks to trigger
+
+    // Drain mode: auto-restock sand from shop
+    private boolean drainRestocking = false;
+    private int drainRestockRetries = 0;
+    private int drainSandCheckCounter = 0;
+    private static final int DRAIN_SAND_CHECK_INTERVAL = 40; // check every 2s
+    private static final int DRAIN_SAND_THRESHOLD = 64;      // 1 stack
+    private static final int DRAIN_MAX_RESTOCK_RETRIES = 3;
 
     // Movement-block detection (server rejected the position packet)
     private Vec3 lastSentPosition = null;
@@ -361,6 +372,7 @@ public class SweepExecutor {
         state = State.IDLE;
         resetPath();
         resetApproach();
+        resetDrainState();
         SweepState.setRunning(false);
         SweepState.clearPauseState();
         clearActionBar();
@@ -579,6 +591,80 @@ public class SweepExecutor {
         String msg = "§e⏸ PAUSED §7| §f" + station + "/" + totalStations
             + " §7— §e/csweep pause §7to resume";
         client.player.displayClientMessage(Component.literal(msg), true);
+    }
+
+    /** Shows a restocking indicator on the action bar (drain mode). */
+    private void showActionBarRestocking() {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player == null) return;
+        String msg = "§b⏳ Restocking sand... §7— buying from shop";
+        client.player.displayClientMessage(Component.literal(msg), true);
+    }
+
+    // --- Drain mode helpers ---
+
+    /**
+     * Counts sand items in the player's inventory.
+     */
+    private static int countSand(Minecraft client) {
+        if (client.player == null) return 0;
+        int count = 0;
+        for (ItemStack stack : client.player.getInventory().items) {
+            if (stack.getItem() == Items.SAND) {
+                count += stack.getCount();
+            }
+        }
+        return count;
+    }
+
+    /**
+     * Checks whether the shop restock has completed.
+     * If successful and we have enough sand, resumes the sweep.
+     * If failed, retries up to {@link #DRAIN_MAX_RESTOCK_RETRIES} times.
+     */
+    private void checkRestockComplete(Minecraft client) {
+        ShopExecutor shop = ShopExecutor.getInstance();
+        if (shop.isRunning()) return; // still processing
+
+        if (shop.isError()) {
+            drainRestockRetries++;
+            if (drainRestockRetries < DRAIN_MAX_RESTOCK_RETRIES) {
+                // Retry
+                shop.startBuy(Items.SAND, -1);
+                showActionBarRestocking();
+                return;
+            }
+            // Max retries exceeded — stop sweep
+            error("Failed to restock sand after " + DRAIN_MAX_RESTOCK_RETRIES
+                + " attempts: " + shop.getErrorMessage());
+            drainRestocking = false;
+            drainRestockRetries = 0;
+            return;
+        }
+
+        // Shop completed — check if we have enough sand
+        drainRestocking = false;
+        drainRestockRetries = 0;
+        int sandCount = countSand(client);
+        if (sandCount >= DRAIN_SAND_THRESHOLD) {
+            if (client.player != null) {
+                client.player.displayClientMessage(Component.literal(
+                    "§a✔ Restocked §e" + sandCount + " §asand — resuming sweep"), false);
+            }
+            resume();
+        } else {
+            // Shop succeeded but we still don't have enough sand
+            // (maybe shop didn't have any). Retry.
+            drainRestockRetries++;
+            if (drainRestockRetries < DRAIN_MAX_RESTOCK_RETRIES) {
+                drainRestocking = true;
+                shop.startBuy(Items.SAND, -1);
+                showActionBarRestocking();
+            } else {
+                error("Could not buy enough sand. Have " + sandCount
+                    + ", need " + DRAIN_SAND_THRESHOLD + ". Shop may be out of stock.");
+            }
+        }
     }
 
     /** Compact ETA: "1h23m", "2m35s", "45s". */
@@ -825,8 +911,31 @@ public class SweepExecutor {
             return;
         }
 
+        // Drain mode: waiting for shop restock to complete
+        if (state == State.PAUSED && drainRestocking) {
+            checkRestockComplete(client);
+            return;
+        }
+
         if (state != State.MOVING && state != State.APPROACHING) return;
         if (client.player == null || client.level == null || client.player.connection == null) return;
+
+        // Drain mode: periodic sand check
+        if (SweepState.getMode() == SweepState.Mode.DRAIN && !drainRestocking) {
+            drainSandCheckCounter++;
+            if (drainSandCheckCounter >= DRAIN_SAND_CHECK_INTERVAL) {
+                drainSandCheckCounter = 0;
+                ShopExecutor shop = ShopExecutor.getInstance();
+                if (!shop.isRunning() && countSand(client) < DRAIN_SAND_THRESHOLD) {
+                    pause();
+                    drainRestocking = true;
+                    drainRestockRetries = 0;
+                    shop.startBuy(Items.SAND, -1); // buy all sand
+                    showActionBarRestocking();
+                    return;
+                }
+            }
+        }
 
         if (state == State.APPROACHING) {
             doApproach(client);
@@ -1623,6 +1732,12 @@ public class SweepExecutor {
         blockedTicks = 0;
         blockageScanTickCounter = 0;
         cachedBlockageCount = 0;
+    }
+
+    private void resetDrainState() {
+        drainRestocking = false;
+        drainRestockRetries = 0;
+        drainSandCheckCounter = 0;
     }
 
     // --- Shared snake-path algorithm ---

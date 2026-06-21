@@ -1,6 +1,7 @@
 package indi.ohtoai.tool.client_tools.client.mixin;
 
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.shop.ShopExecutor;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.screens.Screen;
 import net.minecraft.client.gui.screens.inventory.AbstractContainerScreen;
@@ -32,7 +33,7 @@ public class SuppressScreenMixin {
         Minecraft self = (Minecraft) (Object) this;
         client_tools$previousScreen = self.screen;
 
-        if (CraftingExecutor.getInstance().isRunning() && screen instanceof AbstractContainerScreen) {
+        if ((CraftingExecutor.getInstance().isRunning() || ShopExecutor.getInstance().isRunning()) && screen instanceof AbstractContainerScreen) {
             ci.cancel();
         }
     }
@@ -44,7 +45,7 @@ public class SuppressScreenMixin {
         // Fallback: if a container screen leaked through despite the HEAD cancel
         // (e.g. a Fabric API redirect or direct field write), restore the
         // previous screen that the player was actually using.
-        if (CraftingExecutor.getInstance().isRunning()
+        if ((CraftingExecutor.getInstance().isRunning() || ShopExecutor.getInstance().isRunning())
             && self.screen instanceof AbstractContainerScreen
             && client_tools$previousScreen != null
             && !(client_tools$previousScreen instanceof AbstractContainerScreen)) {

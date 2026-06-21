@@ -18,6 +18,12 @@ import java.util.List;
  * <p>Files are stored under {@code config/client-tools/sweep/<world-id>.json}.
  */
 public class SweepState {
+
+    public enum Mode {
+        MINING,  // default — mining assist
+        DRAIN    // water drain — checks sand, auto-buys from shop
+    }
+
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
     private static final Path BASE_DIR = FabricLoader.getInstance().getConfigDir()
         .resolve("client-tools").resolve("sweep");
@@ -40,6 +46,7 @@ public class SweepState {
     private static boolean avoidWater = true;
     private static boolean blockageDetection = true;
     private static boolean blockageStop = false;
+    private static Mode mode = Mode.MINING;
     private static int areaVersion = 0;
     private static boolean loaded = false;
     private static String currentWorldId = "";
@@ -65,6 +72,7 @@ public class SweepState {
         Boolean avoidWater;     // boxed so missing (old config) defaults to true
         Boolean blockageDetection; // boxed so missing (old config) defaults to true
         Boolean blockageStop;      // boxed so missing (old config) defaults to false
+        String mode;               // "MINING" or "DRAIN" — missing defaults to MINING
     }
 
     @SuppressWarnings("unused")
@@ -122,6 +130,7 @@ public class SweepState {
             avoidWater = true;
             blockageDetection = true;
             blockageStop = false;
+            mode = Mode.MINING;
             invalidateCache();
             load();
             loaded = true;
@@ -149,6 +158,15 @@ public class SweepState {
     public static boolean isBlockageDetection() { ensureLoaded(); return blockageDetection; }
     public static boolean isBlockageStop() { ensureLoaded(); return blockageStop; }
     public static int getAreaVersion() { ensureLoaded(); return areaVersion; }
+    public static Mode getMode() { ensureLoaded(); return mode; }
+
+    public static void setMode(Mode v) {
+        ensureLoaded();
+        if (mode != v) {
+            mode = v;
+            save();
+        }
+    }
 
     /**
      * Enables or disables Litematica area selection synchronization.
@@ -343,6 +361,7 @@ public class SweepState {
         avoidWater = true;
         blockageDetection = true;
         blockageStop = false;
+        mode = Mode.MINING;
         areaVersion++;
         invalidateCache();
         save();
@@ -370,6 +389,7 @@ public class SweepState {
         data.avoidWater = avoidWater;
         data.blockageDetection = blockageDetection;
         data.blockageStop = blockageStop;
+        data.mode = mode.name();
 
         try {
             Files.createDirectories(path.getParent());
@@ -401,6 +421,11 @@ public class SweepState {
             avoidWater = data.avoidWater != null ? data.avoidWater : true;
             blockageDetection = data.blockageDetection != null ? data.blockageDetection : true;
             blockageStop = data.blockageStop != null ? data.blockageStop : false;
+            if (data.mode != null) {
+                try { mode = Mode.valueOf(data.mode); } catch (IllegalArgumentException e) { mode = Mode.MINING; }
+            } else {
+                mode = Mode.MINING;
+            }
         } catch (IOException ignored) {}
     }
 }
