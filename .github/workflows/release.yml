@@ -75,8 +75,13 @@ jobs:
               repo: context.repo.repo
             })).data;
             for (const release of releases) {
-              if (release.name && release.name.includes(READ_VERSION)) {
-                core.setFailed('Version ' + READ_VERSION + ' has already been released! Bump mod_version in gradle.properties to publish a new version, or use workflow_dispatch to retry.')
+              // Extract version from release name "ClientTools vX.Y.Z" for exact comparison.
+              // Using includes() would false-match: "1.2.9-beta" contains "1.2.9".
+              if (release.name) {
+                const versionFromName = release.name.replace(/^ClientTools v/, '');
+                if (versionFromName === READ_VERSION) {
+                  core.setFailed('Version ' + READ_VERSION + ' has already been released! Bump mod_version in gradle.properties to publish a new version, or use workflow_dispatch to retry.')
+                }
               }
             }
             core.info('Version ' + READ_VERSION + ' is new — proceeding with release.')
