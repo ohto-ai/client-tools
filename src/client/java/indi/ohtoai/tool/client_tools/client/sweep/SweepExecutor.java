@@ -125,10 +125,9 @@ public class SweepExecutor {
     private static final int BLOCKAGE_THRESHOLD = 2;         // min unmined blocks to trigger
 
     // Movement-block detection (server rejected the position packet)
-    private Vec3 lastActualPosition = null;
+    private Vec3 lastSentPosition = null;
     private int blockedTicks = 0;
     private static final int BLOCKED_TICK_THRESHOLD = 3;   // consecutive blocked ticks to trigger
-    private static final double MOVE_PROGRESS_RATIO = 0.3;  // actual/expected ratio below which = blocked
     private static final double EMERGENCY_SPEED = 0.5;      // speed when stuck/blocked/underwater
 
     // --- Penalty status (exposed for /csweep penalty) ---
@@ -868,6 +867,7 @@ public class SweepExecutor {
             // Arrived — snap to target and transition to MOVING
             Vec3 target = avoidWater(client, approachTarget);
             client.player.setPos(target.x, target.y, target.z);
+            lastSentPosition = target;
             client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
                 target.x, target.y, target.z, getSpoofedOnGround(client)));
             state = State.MOVING;
@@ -888,6 +888,7 @@ public class SweepExecutor {
         client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
             adjusted.x, adjusted.y, adjusted.z, getSpoofedOnGround(client)));
         client.player.setPos(adjusted.x, adjusted.y, adjusted.z);
+        lastSentPosition = adjusted;
     }
 
     // --- MOVING (continuous interpolation) ---
@@ -927,6 +928,7 @@ public class SweepExecutor {
             // Reached end — snap to final station
             Vec3 end = avoidWater(client, stationPath.get(stationPath.size() - 1));
             client.player.setPos(end.x, end.y, end.z);
+            lastSentPosition = end;
             client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
                 end.x, end.y, end.z, getSpoofedOnGround(client)));
             finish();
@@ -953,6 +955,7 @@ public class SweepExecutor {
         client.player.connection.send(new ServerboundMovePlayerPacket.Pos(
             adjusted.x, adjusted.y, adjusted.z, getSpoofedOnGround(client)));
         client.player.setPos(adjusted.x, adjusted.y, adjusted.z);
+        lastSentPosition = adjusted;
     }
 
     /** Binary search for the segment containing the given distance. */
@@ -1217,30 +1220,35 @@ public class SweepExecutor {
 
     /**
      * Checks whether the player is actually making progress along the path.
-     * Compares the actual position delta between ticks against the expected
-     * movement speed.  If the player barely moved for several consecutive
-     * ticks, the server is rejecting our position packets — we're blocked.
+     * Compares the player's current position against the position we last
+     * sent via {@code setPos} + movement packet.  If the two differ, the
+     * server has sent a correction (rubberband) — we're blocked.
      *
-     * @return true if the player is blocked and speed should drop to minimum
+     * <p>This replaces the old delta-between-ticks approach which was fooled
+     * by {@code setPos} itself: after a teleport, {@code player.position()}
+     * returns the teleported position, so the next tick's comparison saw
+     * phantom "movement" and never detected the server rejection.
+     *
+     * @return true if the player is blocked and should hold position
      */
     private boolean checkMovementBlocked(Minecraft client) {
         if (client.player == null) return false;
 
         Vec3 currentPos = client.player.position();
-        if (lastActualPosition == null) {
-            lastActualPosition = currentPos;
-            blockedTicks = 0;
+        if (lastSentPosition == null) {
+            // First tick after start/resume — nothing to compare yet
             return false;
         }
 
         boolean wasBlocked = blockedTicks >= BLOCKED_TICK_THRESHOLD;
 
-        double actuallyMoved = currentPos.distanceTo(lastActualPosition);
-        double expectedStep = SweepState.getSpeed() / 20.0;
-        lastActualPosition = currentPos;
+        // If the server rejected our last setPos, it sent a correction
+        // that changed player.position() away from what we set.
+        // Minecraft position packets use fixed-point encoding (long),
+        // so round-trip is exact — any deviation means a server correction.
+        double deviation = currentPos.distanceTo(lastSentPosition);
 
-        // Player moved less than 30% of the expected distance → blocked this tick
-        if (actuallyMoved < expectedStep * MOVE_PROGRESS_RATIO && expectedStep > 0.05) {
+        if (deviation > 0.01) {
             blockedTicks++;
         } else {
             blockedTicks = Math.max(0, blockedTicks - 1);
@@ -1253,7 +1261,8 @@ public class SweepExecutor {
             int station = globalStationOffset + currentStationIndex;
             client.player.displayClientMessage(Component.literal(
                 "§c⚠ Sweep blocked §7— §fserver rejected movement at station §e"
-                + station + "§f, waiting for blocks to be mined..."), false);
+                + station + "§f (deviation §6" + String.format("%.2f", deviation)
+                + "§f), waiting for blocks to be mined..."), false);
         } else if (!isBlocked && wasBlocked) {
             client.player.displayClientMessage(Component.literal(
                 "§a✔ Sweep resumed §7— §fmovement accepted again"), false);
@@ -1610,7 +1619,7 @@ public class SweepExecutor {
         approachTarget = null;
         approachDistance = 0.0;
         approachTraveled = 0.0;
-        lastActualPosition = null;
+        lastSentPosition = null;
         blockedTicks = 0;
         blockageScanTickCounter = 0;
         cachedBlockageCount = 0;
