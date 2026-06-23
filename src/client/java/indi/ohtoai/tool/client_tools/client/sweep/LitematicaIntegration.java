@@ -1,13 +1,17 @@
 package indi.ohtoai.tool.client_tools.client.sweep;
 
 import net.fabricmc.loader.api.FabricLoader;
+import net.fabricmc.loader.api.ModContainer;
 import net.minecraft.core.BlockPos;
 import net.minecraft.core.Direction;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.ArrayList;
 import java.util.List;
+import java.util.stream.Collectors;
 
 /**
  * Reflection-based access to Litematica's area selection API.
@@ -51,8 +55,12 @@ public class LitematicaIntegration {
 
     // --- Move selection ---
 
-    /** Reflected method: SelectionManager.moveSelectedElement(String, Direction, int) */
+    /** Reflected method: SelectionManager.moveSelectedElement(Direction, int) */
     private static Method moveSelectedElementMethod;
+    /** Reflected method: AreaSelection.setSelectedSubRegionBox(String) */
+    private static Method setSelectedSubRegionBoxMethod;
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("ClientTools|Litematica");
 
     private LitematicaIntegration() {}
 
@@ -163,9 +171,9 @@ public class LitematicaIntegration {
             if (boxes == null || boxes.isEmpty()) return 0;
 
             // Apply each non-zero axis offset to every sub-region
-            applyMove(selectionManager, boxes, dx, Direction.EAST, Direction.WEST);
-            applyMove(selectionManager, boxes, dy, Direction.UP, Direction.DOWN);
-            applyMove(selectionManager, boxes, dz, Direction.SOUTH, Direction.NORTH);
+            applyMove(selectionManager, currentSelection, boxes, dx, Direction.EAST, Direction.WEST);
+            applyMove(selectionManager, currentSelection, boxes, dy, Direction.UP, Direction.DOWN);
+            applyMove(selectionManager, currentSelection, boxes, dz, Direction.SOUTH, Direction.NORTH);
 
             return boxes.size();
         } catch (IllegalAccessException | InvocationTargetException e) {
@@ -173,7 +181,7 @@ public class LitematicaIntegration {
         }
     }
 
-    private static void applyMove(Object selectionManager, List<?> boxes,
+    private static void applyMove(Object selectionManager, Object areaSelection, List<?> boxes,
                                    int offset, Direction posDir, Direction negDir)
             throws IllegalAccessException, InvocationTargetException {
         if (offset == 0) return;
@@ -190,7 +198,11 @@ public class LitematicaIntegration {
                     if (n != null && !n.isEmpty()) name = n;
                 } catch (Exception ignored) {}
             }
-            moveSelectedElementMethod.invoke(selectionManager, name, dir, amount);
+            // Select the sub-region by name, then move it
+            if (setSelectedSubRegionBoxMethod != null) {
+                setSelectedSubRegionBoxMethod.invoke(areaSelection, name);
+            }
+            moveSelectedElementMethod.invoke(selectionManager, dir, amount);
         }
     }
 
@@ -217,9 +229,43 @@ public class LitematicaIntegration {
     }
 
     private static void initReflection() throws Exception {
-        if (!FabricLoader.getInstance().isModLoaded("litematica")) {
-            throw new IllegalStateException("Litematica mod not loaded");
+        // --- Mod detection: try standard mod ID first, then class presence ---
+        boolean modLoaded = FabricLoader.getInstance().isModLoaded("litematica");
+
+        if (!modLoaded) {
+            // Fallback: detect by class presence (handles forks with different mod IDs)
+            try {
+                Class.forName("fi.dy.masa.litematica.data.DataManager");
+                modLoaded = true;
+                LOGGER.warn("Litematica not found by mod ID, but classes are present. "
+                    + "This may indicate a fork with a different mod ID.");
+            } catch (ClassNotFoundException ignored) {
+                // Neither mod ID nor class presence — Litematica is truly absent
+            }
         }
+
+        if (!modLoaded) {
+            // Collect all loaded mods whose ID or name contains "litematica" for diagnostics
+            String candidates = FabricLoader.getInstance().getAllMods().stream()
+                .map(ModContainer::getMetadata)
+                .filter(m -> m.getId().toLowerCase().contains("litematica")
+                    || m.getName().toLowerCase().contains("litematica"))
+                .map(m -> m.getId() + " (" + m.getName() + ")")
+                .collect(Collectors.joining(", "));
+
+            String detail = "Litematica mod not found.";
+            if (!candidates.isEmpty()) {
+                detail += " Found similar mod(s): " + candidates
+                    + ". Mod ID may not match — check your Litematica fork's fabric.mod.json for the exact 'id' field.";
+            } else {
+                detail += " No mod with 'litematica' in its ID or name is loaded."
+                    + " Install Litematica (or a compatible fork) into your mods folder.";
+            }
+            LOGGER.error("[ClientTools] {}", detail);
+            throw new IllegalStateException(detail);
+        }
+
+        LOGGER.info("Litematica detected successfully.");
 
         // 1. DataManager class + getInstance()
         Class<?> dataManagerClass = Class.forName("fi.dy.masa.litematica.data.DataManager");
@@ -276,8 +322,14 @@ public class LitematicaIntegration {
             boxGetNameMethod = null; // optional
         }
 
-        // 9. SelectionManager.moveSelectedElement(String, Direction, int)
+        // 9. SelectionManager.moveSelectedElement(Direction, int)
+        //    Note: some forks use (Direction, int) without the String name parameter.
+        //    The sub-region is targeted via AreaSelection.setSelectedSubRegionBox() first.
         moveSelectedElementMethod = selectionManagerClass.getMethod(
-            "moveSelectedElement", String.class, Direction.class, int.class);
+            "moveSelectedElement", Direction.class, int.class);
+
+        // 10. AreaSelection.setSelectedSubRegionBox(String) — select which box to move
+        setSelectedSubRegionBoxMethod = areaSelectionClass.getMethod(
+            "setSelectedSubRegionBox", String.class);
     }
 }

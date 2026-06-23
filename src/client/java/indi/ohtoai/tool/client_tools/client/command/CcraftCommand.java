@@ -116,9 +116,22 @@ public class CcraftCommand {
         (ctx, builder) -> {
             String remaining = builder.getRemaining().toLowerCase();
             for (String s : new String[]{"source", "product", "station", "input", "output",
-                "status", "show", "clear", "count", "stop", "run"}) {
+                "status", "show", "clear", "count", "stop", "run",
+                "save", "load", "list", "delete", "nearest"}) {
                 if (s.toLowerCase().startsWith(remaining)) {
                     builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
+
+    /** Suggests saved station names for load/delete tab-completion. */
+    private static final SuggestionProvider<FabricClientCommandSource> STATION_NAME_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String name : CcraftState.getStationNames()) {
+                if (name.toLowerCase().contains(remaining)) {
+                    builder.suggest(name);
                 }
             }
             return builder.buildFuture();
@@ -282,6 +295,34 @@ public class CcraftCommand {
                 .then(literal("run")
                     .executes(ctx -> runCraft(ctx.getSource()))
                 )
+                // /ccraft save <name>
+                .then(literal("save")
+                    .then(argument("name", StringArgumentType.greedyString())
+                        .executes(ctx -> saveStation(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "name"))))
+                )
+                // /ccraft load <name>
+                .then(literal("load")
+                    .then(argument("name", StringArgumentType.greedyString())
+                        .suggests(STATION_NAME_SUGGESTIONS)
+                        .executes(ctx -> loadStation(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "name"))))
+                )
+                // /ccraft list
+                .then(literal("list")
+                    .executes(ctx -> listStations(ctx.getSource()))
+                )
+                // /ccraft delete <name>
+                .then(literal("delete")
+                    .then(argument("name", StringArgumentType.greedyString())
+                        .suggests(STATION_NAME_SUGGESTIONS)
+                        .executes(ctx -> deleteStation(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "name"))))
+                )
+                // /ccraft nearest
+                .then(literal("nearest")
+                    .executes(ctx -> nearestStation(ctx.getSource()))
+                )
         );
     }
 
@@ -306,6 +347,11 @@ public class CcraftCommand {
         source.sendFeedback(Component.translatable("client-tools.ccraft.help.run"));
         source.sendFeedback(Component.translatable("client-tools.ccraft.help.stop"));
         source.sendFeedback(Component.translatable("client-tools.ccraft.help.clear"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.save"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.load"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.list"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.delete"));
+        source.sendFeedback(Component.translatable("client-tools.ccraft.help.nearest"));
         source.sendFeedback(Component.translatable("client-tools.ccraft.help.quick_start"));
         return 1;
     }
@@ -344,6 +390,21 @@ public class CcraftCommand {
             }
             case "clear" -> {
                 source.sendFeedback(Component.translatable("client-tools.ccraft.help.clear_detail"));
+            }
+            case "save" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.save_detail"));
+            }
+            case "load" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.load_detail"));
+            }
+            case "list" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.list_detail"));
+            }
+            case "delete" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.delete_detail"));
+            }
+            case "nearest" -> {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.help.nearest_detail"));
             }
             default -> source.sendFeedback(Component.translatable("client-tools.ccraft.help.unknown_subcommand", subcommand));
         }
@@ -569,6 +630,12 @@ public class CcraftCommand {
 
     private static int showStatus(FabricClientCommandSource source) {
         source.sendFeedback(Component.translatable("client-tools.ccraft.status_header"));
+
+        // --- Station name ---
+        String stationName = CcraftState.getCurrentStationName();
+        if (stationName != null) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.status_station_name", stationName));
+        }
 
         // --- Runtime status ---
         CraftingExecutor executor = CraftingExecutor.getInstance();
@@ -849,6 +916,101 @@ public class CcraftCommand {
         } else {
             source.sendFeedback(Component.translatable("client-tools.ccraft.not_running"));
         }
+        return 1;
+    }
+
+    // ==================== Multi-Station Management ====================
+
+    private static int saveStation(FabricClientCommandSource source, String name) {
+        String trimmed = name.trim();
+        if (trimmed.isEmpty()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.save_no_name"));
+            return 0;
+        }
+        boolean existed = CcraftState.getStationNames().contains(trimmed);
+        CcraftState.saveCurrentStation(trimmed);
+        if (existed) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_already_exists", trimmed));
+        }
+        source.sendFeedback(Component.translatable("client-tools.ccraft.station_saved", trimmed));
+        return 1;
+    }
+
+    private static int loadStation(FabricClientCommandSource source, String name) {
+        String trimmed = name.trim();
+        if (CcraftState.loadStation(trimmed)) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_loaded", trimmed));
+            // Auto-show highlight for visual confirmation
+            CcraftHighlightRenderer.trigger();
+            return 1;
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_not_found", trimmed));
+            return 0;
+        }
+    }
+
+    private static int listStations(FabricClientCommandSource source) {
+        List<String> names = CcraftState.getStationNames();
+        if (names.isEmpty()) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_list_empty"));
+            return 1;
+        }
+
+        String activeName = CcraftState.getCurrentStationName();
+        source.sendFeedback(Component.translatable("client-tools.ccraft.station_list_header", names.size()));
+
+        Map<String, CcraftState.StationData> dataMap = CcraftState.getStationsData();
+        for (String name : names) {
+            CcraftState.StationData data = dataMap.get(name);
+            String productStr = data.productItem != null ? data.productItem : "—";
+            String posStr;
+            if (data.stationPos != null) {
+                posStr = data.stationPos.x + " " + data.stationPos.y + " " + data.stationPos.z;
+            } else {
+                posStr = "—";
+            }
+            double dist = CcraftState.distanceTo(name);
+            String distStr = dist >= 0 ? String.format("%.1f", dist) : "—";
+
+            if (name.equals(activeName)) {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.station_list_entry_active",
+                    name, data.stationPos != null ? data.stationPos.x : "—",
+                    data.stationPos != null ? data.stationPos.y : "—",
+                    data.stationPos != null ? data.stationPos.z : "—",
+                    productStr, distStr));
+            } else {
+                source.sendFeedback(Component.translatable("client-tools.ccraft.station_list_entry",
+                    name, data.stationPos != null ? data.stationPos.x : "—",
+                    data.stationPos != null ? data.stationPos.y : "—",
+                    data.stationPos != null ? data.stationPos.z : "—",
+                    productStr, distStr));
+            }
+        }
+        return 1;
+    }
+
+    private static int deleteStation(FabricClientCommandSource source, String name) {
+        String trimmed = name.trim();
+        if (CcraftState.deleteStation(trimmed)) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_deleted", trimmed));
+            return 1;
+        } else {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.station_not_found", trimmed));
+            return 0;
+        }
+    }
+
+    private static int nearestStation(FabricClientCommandSource source) {
+        String nearest = CcraftState.findNearestStation();
+        if (nearest == null) {
+            source.sendFeedback(Component.translatable("client-tools.ccraft.nearest_not_found"));
+            return 0;
+        }
+        double dist = CcraftState.distanceTo(nearest);
+        source.sendFeedback(Component.translatable("client-tools.ccraft.nearest_found", nearest,
+            String.format("%.1f", dist)));
+        // Auto-show highlight for visual confirmation
+        CcraftHighlightRenderer.trigger();
         return 1;
     }
 }

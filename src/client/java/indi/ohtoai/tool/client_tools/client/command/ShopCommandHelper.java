@@ -17,7 +17,17 @@ import static net.fabricmc.fabric.api.client.command.v2.ClientCommandManager.lit
 
 /**
  * Shared helpers for {@code /cbuy} and {@code /csell} commands.
- * Eliminates the ~95% duplicated code between the two command classes.
+ * Uses a single {@code greedyString} argument to support namespaced
+ * item IDs (e.g. {@code minecraft:sand}) which contain {@code :}
+ * — a character not allowed in regular {@code StringArgumentType.string()}.
+ *
+ * <p>Command syntax:
+ * <pre>
+ * /cbuy &lt;item&gt; [count]
+ * /csell &lt;item&gt; [count]
+ * </pre>
+ * The count defaults to {@code all} when omitted. When present, the last
+ * space-separated token is treated as the count if it is a number or {@code all}.
  */
 final class ShopCommandHelper {
 
@@ -25,7 +35,7 @@ final class ShopCommandHelper {
 
     enum Mode { BUY, SELL }
 
-    // --- Shared suggestion providers ---
+    // --- Suggestion providers ---
 
     static final SuggestionProvider<FabricClientCommandSource> ITEM_SUGGESTIONS =
         (ctx, builder) -> {
@@ -45,36 +55,27 @@ final class ShopCommandHelper {
             return builder.buildFuture();
         };
 
-    static final SuggestionProvider<FabricClientCommandSource> COUNT_SUGGESTIONS =
-        (ctx, builder) -> {
-            String remaining = builder.getRemaining().toLowerCase();
-            for (String s : new String[]{"all", "1", "8", "16", "32", "64", "128", "256", "512", "1024"}) {
-                if (s.startsWith(remaining)) builder.suggest(s);
-            }
-            return builder.buildFuture();
-        };
-
     // --- Registration ---
 
+    /**
+     * Registers the command with a single {@code greedyString} argument so that
+     * namespaced item IDs (containing {@code :}) are parsed correctly.
+     * The item name and optional count are extracted from the raw input string.
+     */
     static void register(CommandDispatcher<FabricClientCommandSource> dispatcher, String literalName, Mode mode) {
         dispatcher.register(
             literal(literalName)
-                .then(argument("item", StringArgumentType.string())
+                .then(argument("itemAndCount", StringArgumentType.greedyString())
                     .suggests(ITEM_SUGGESTIONS)
-                    .then(argument("count", StringArgumentType.word())
-                        .suggests(COUNT_SUGGESTIONS)
-                        .executes(ctx -> execute(ctx.getSource(),
-                            StringArgumentType.getString(ctx, "item"),
-                            StringArgumentType.getString(ctx, "count"),
-                            mode)))
                     .executes(ctx -> execute(ctx.getSource(),
-                        StringArgumentType.getString(ctx, "item"), "all", mode)))
+                        StringArgumentType.getString(ctx, "itemAndCount"),
+                        mode)))
         );
     }
 
     // --- Execution ---
 
-    private static int execute(FabricClientCommandSource source, String itemName, String countStr, Mode mode) {
+    private static int execute(FabricClientCommandSource source, String input, Mode mode) {
         Minecraft client = Minecraft.getInstance();
 
         if (client.player == null || client.player.connection == null) {
@@ -82,14 +83,48 @@ final class ShopCommandHelper {
             return 0;
         }
 
-        // Resolve item
+        // --- Parse item name and count from the greedy string ---
+        // The last space-separated token is treated as the count if it
+        // is "all" (case-insensitive) or a positive integer.
+        // Everything before it is the item name.
+        // This allows item names to contain ':' (e.g. "minecraft:sand")
+        // as well as Chinese characters.
+        String itemName;
+        String countStr = "all";
+
+        String trimmed = input.trim();
+        if (trimmed.isEmpty()) {
+            source.sendFeedback(Component.translatable("client-tools.shop.unknown_item", ""));
+            return 0;
+        }
+
+        int lastSpace = trimmed.lastIndexOf(' ');
+        if (lastSpace > 0) {
+            String lastToken = trimmed.substring(lastSpace + 1);
+            if (isCountToken(lastToken)) {
+                itemName = trimmed.substring(0, lastSpace).trim();
+                countStr = lastToken;
+            } else {
+                // Last token is not a count — treat entire input as item name
+                itemName = trimmed;
+            }
+        } else {
+            itemName = trimmed;
+        }
+
+        if (itemName.isEmpty()) {
+            source.sendFeedback(Component.translatable("client-tools.shop.unknown_item", ""));
+            return 0;
+        }
+
+        // --- Resolve item ---
         Item item = ShopExecutor.resolveItem(itemName);
         if (item == null) {
             source.sendFeedback(Component.translatable("client-tools.shop.unknown_item", itemName));
             return 0;
         }
 
-        // Parse count
+        // --- Parse count ---
         int count;
         if ("all".equalsIgnoreCase(countStr)) {
             count = -1; // -1 = max/all
@@ -106,7 +141,7 @@ final class ShopCommandHelper {
             }
         }
 
-        // Check for conflicts
+        // --- Check for conflicts ---
         if (CraftingExecutor.getInstance().isRunning()) {
             source.sendFeedback(Component.translatable("client-tools.shop.crafting_running"));
             return 0;
@@ -116,7 +151,7 @@ final class ShopCommandHelper {
             return 0;
         }
 
-        // Dispatch
+        // --- Dispatch ---
         String countDisplay = count < 0 ? "all" : String.valueOf(count);
         String translationKey;
         if (mode == Mode.BUY) {
@@ -129,5 +164,13 @@ final class ShopCommandHelper {
         source.sendFeedback(Component.translatable(translationKey,
             item.getDescription().getString(), countDisplay));
         return 1;
+    }
+
+    /**
+     * Returns true if the token looks like a count argument: "all" or a positive integer.
+     */
+    private static boolean isCountToken(String token) {
+        if (token.equalsIgnoreCase("all")) return true;
+        return token.matches("\\d+");
     }
 }

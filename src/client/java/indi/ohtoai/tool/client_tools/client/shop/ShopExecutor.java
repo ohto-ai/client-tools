@@ -21,6 +21,9 @@ import java.util.List;
 import java.util.Locale;
 import java.util.Map;
 
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+
 /**
  * Tick-based state machine that navigates a container-based shop GUI to buy
  * or sell items. The shop is opened via {@code /shop} chat command.
@@ -41,14 +44,13 @@ import java.util.Map;
  *   Bottom:    "返回" / "退出交易"
  * </pre>
  *
- * <h3>Buy flow:</h3>
+ * <h3>Buy/sell flow:</h3>
  * <ol>
  *   <li>Send {@code /shop} chat</li>
- *   <li>Wait for container → scan items (slots 0-44) for target</li>
- *   <li>If not found, click "下一页" → rescan (up to 50 pages)</li>
- *   <li>Click the target item → wait for detail view</li>
- *   <li>Find the right buy button by count → click it</li>
- *   <li>Wait → click "退出交易" or close container</li>
+ *   <li>Wait for container → scan current page for target item</li>
+ *   <li>If found → click item → detail view → buy/sell → exit</li>
+ *   <li>If not found → navigate to page 1 → scan forward page by page</li>
+ *   <li>If exhausted all pages → error (shop doesn't sell this item)</li>
  * </ol>
  */
 public class ShopExecutor {
@@ -57,9 +59,11 @@ public class ShopExecutor {
         IDLE,
         SEND_SHOP,
         WAIT_OPEN,
-        SCAN_PAGE,          // scan browse page for target item
+        SCAN_PAGE,          // scan current page for target item
+        GO_TO_FIRST,        // navigate backward to page 1
+        WAIT_PREV,          // wait after clicking "上一页"
         NAVIGATE_NEXT,      // click "下一页"
-        WAIT_NAVIGATE,
+        WAIT_NAVIGATE,      // wait after page navigation
         CLICK_ITEM,         // click the target item
         WAIT_DETAIL,        // wait for detail view to appear
         SCAN_ACTION,        // find buy/sell button by item type + count
@@ -82,6 +86,10 @@ public class ShopExecutor {
 
     private ShopExecutor() {}
 
+    // --- Logger ---
+
+    private static final Logger LOGGER = LoggerFactory.getLogger("client-tools");
+
     // --- State ---
 
     private State state = State.IDLE;
@@ -90,14 +98,17 @@ public class ShopExecutor {
     private int targetCount = -1;   // -1 = all
     private String errorMessage = "";
     private int tickCounter;
-    private int pageCount;
     private int foundSlot = -1;     // slot index for current action
     private int lastContainerId = -1;
+    private int pageCount;          // pages scanned so far
+    private boolean scannedCurrentPage; // true after first scan of the shop's opening page
 
-    private static final int WAIT_TICKS = 3;
+    // --- Constants ---
+
+    private static final int NAV_WAIT_TICKS = 4;           // wait after page navigation
     private static final int CONTAINER_OPEN_TIMEOUT = 100; // 5s
     private static final int MAX_PAGES = 50;
-    private static final int DETAIL_WAIT_TICKS = 6;        // slightly longer for server to update container
+    private static final int DETAIL_WAIT_TICKS = 8;
     private static final int ACTION_WAIT_TICKS = 5;
 
     // --- Item name mapping (Chinese → Minecraft item ID) ---
@@ -193,22 +204,14 @@ public class ShopExecutor {
 
     // --- Public API ---
 
-    /**
-     * Start buying items from the shop.
-     * @param item  the Minecraft Item to buy
-     * @param count number to buy (1/8/64 for specific buttons, -1 for "all")
-     */
     public void startBuy(Item item, int count) {
+        LOGGER.info("[shop] startBuy: {} count={}", item.getDescription().getString(), count);
         resetCommon(item, count, true);
         state = State.SEND_SHOP;
     }
 
-    /**
-     * Start selling items to the shop.
-     * @param item  the Minecraft Item to sell
-     * @param count number to sell (1/8/64 for specific buttons, -1 for "all")
-     */
     public void startSell(Item item, int count) {
+        LOGGER.info("[shop] startSell: {} count={}", item.getDescription().getString(), count);
         resetCommon(item, count, false);
         state = State.SEND_SHOP;
     }
@@ -222,10 +225,12 @@ public class ShopExecutor {
         this.foundSlot = -1;
         this.lastContainerId = -1;
         this.errorMessage = "";
+        this.scannedCurrentPage = false;
     }
 
     public void stop() {
         if (!isRunning()) return;
+        LOGGER.info("[shop] stop() in state={}", state);
         closeContainer();
         state = State.IDLE;
     }
@@ -235,10 +240,16 @@ public class ShopExecutor {
 
         tickCounter++;
 
+        if (tickCounter == 1) {
+            LOGGER.info("[shop] → {}", state);
+        }
+
         switch (state) {
             case SEND_SHOP -> doSendShop(client);
             case WAIT_OPEN -> doWaitOpen(client);
             case SCAN_PAGE -> doScanPage(client);
+            case GO_TO_FIRST -> doGoToFirst(client);
+            case WAIT_PREV -> doWaitPrev(client);
             case NAVIGATE_NEXT -> doNavigateNext(client);
             case WAIT_NAVIGATE -> doWaitNavigate(client);
             case CLICK_ITEM -> doClickItem(client);
@@ -264,9 +275,6 @@ public class ShopExecutor {
 
     // --- Item name resolution ---
 
-    /**
-     * Resolves a user-provided item name to a Minecraft Item.
-     */
     public static Item resolveItem(String name) {
         if (name == null || name.isEmpty()) return null;
 
@@ -277,7 +285,7 @@ public class ShopExecutor {
             return resolveById(ITEM_NAME_MAP.get(name));
         }
 
-        // 2. Try as full Minecraft item ID (e.g. "minecraft:sand")
+        // 2. Try as full item ID (e.g. "minecraft:sand", "create:crushed_iron")
         if (lower.contains(":")) {
             ResourceLocation rl = ResourceLocation.tryParse(lower);
             if (rl != null) {
@@ -286,23 +294,31 @@ public class ShopExecutor {
             }
         }
 
-        // 3. Try as item path only (prefix with "minecraft:")
+        // 3. Try as bare item name — search all namespaces for an exact path match
         if (!lower.contains(":")) {
-            ResourceLocation minecraftRl = ResourceLocation.tryParse("minecraft:" + lower);
-            if (minecraftRl != null) {
-                Item item = BuiltInRegistries.ITEM.get(minecraftRl);
+            // 3a. Try "minecraft:" first (most common)
+            ResourceLocation mcRl = ResourceLocation.tryParse("minecraft:" + lower);
+            if (mcRl != null) {
+                Item item = BuiltInRegistries.ITEM.get(mcRl);
                 if (item != Items.AIR) return item;
+            }
+            // 3b. Search all registered items for exact path match
+            for (var entry : BuiltInRegistries.ITEM.entrySet()) {
+                if (entry.getKey().location().getPath().equals(lower)) {
+                    Item item = entry.getValue();
+                    if (item != Items.AIR) return item;
+                }
             }
         }
 
-        // 4. Try fuzzy match against item name mapping values
+        // 4. Fuzzy match against Chinese name map values
         for (var entry : ITEM_NAME_MAP.entrySet()) {
             if (entry.getValue().contains(lower)) {
                 return resolveById(entry.getValue());
             }
         }
 
-        // 5. Try fuzzy match against registry keys
+        // 5. Fuzzy match against registry keys
         for (var entry : BuiltInRegistries.ITEM.entrySet()) {
             if (entry.getKey().location().getPath().contains(lower)) {
                 return entry.getValue();
@@ -319,10 +335,6 @@ public class ShopExecutor {
         return item != Items.AIR ? item : null;
     }
 
-    /**
-     * Returns all known Chinese item names for tab completion.
-     * Use together with registry item ID matching for full suggestions.
-     */
     public static java.util.Set<String> getChineseItemNames() {
         return ITEM_NAME_MAP.keySet();
     }
@@ -341,7 +353,7 @@ public class ShopExecutor {
         int size = ContainerUtils.getContainerSize(client.player.containerMenu);
         if (size > 0) {
             lastContainerId = client.player.containerMenu.containerId;
-            pageCount = 0;
+            LOGGER.info("[shop] Container opened: size={}, containerId={}", size, lastContainerId);
             state = State.SCAN_PAGE;
             tickCounter = 0;
             return;
@@ -352,21 +364,21 @@ public class ShopExecutor {
     }
 
     /**
-     * Scans the browse page (slots 0-44) for the target item.
-     * Also checks if we somehow ended up in a detail view (has lime/red glass panes).
+     * Scans the current browse page (slots 0-44) for the target item.
+     * On the first call after opening the shop, if the item is not found,
+     * we go to page 1 before scanning forward systematically.
      */
     private void doScanPage(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
         int size = ContainerUtils.getContainerSize(menu);
         if (size < 0) {
-            error("Shop container closed unexpectedly");
+            error("Shop container closed");
             return;
         }
         lastContainerId = menu.containerId;
 
-        // If we see lime_stained_glass_pane or red_stained_glass_pane, we are in
-        // a detail view (maybe from a stale session). Try to exit first.
+        // Handle accidental detail view
         if (hasDetailViewItems(menu, size)) {
             clickButtonByText(menu, size, "返回");
             state = State.WAIT_NAVIGATE;
@@ -374,61 +386,113 @@ public class ShopExecutor {
             return;
         }
 
-        // Scan item slots (0 to min(size-1, 44)) for the target item
-        int scanEnd = Math.min(size - 1, 44);
-        foundSlot = -1;
-        for (int i = 0; i <= scanEnd; i++) {
-            ItemStack stack = menu.getSlot(i).getItem();
-            if (!stack.isEmpty() && stack.getItem() == targetItem) {
-                foundSlot = i;
-                break;
-            }
-        }
-
+        // Scan for target item
+        foundSlot = findItemSlot(menu, size, targetItem);
         if (foundSlot >= 0) {
+            LOGGER.info("[shop] Found {} in slot {} (page {} of scan)",
+                targetItem.getDescription().getString(), foundSlot, pageCount + 1);
             state = State.CLICK_ITEM;
             tickCounter = 0;
-        } else {
-            // Try "下一页"
-            int nextSlot = findButtonByText(menu, size, "下一页");
-            if (nextSlot >= 0 && pageCount < MAX_PAGES) {
-                foundSlot = nextSlot;
+            return;
+        }
+
+        // Item not on this page
+        if (!scannedCurrentPage) {
+            // First scan of the shop's opening page — go to page 1
+            scannedCurrentPage = true;
+            LOGGER.info("[shop] Item not on opening page, going to page 1");
+            state = State.GO_TO_FIRST;
+            tickCounter = 0;
+            return;
+        }
+
+        // Already scanning from page 1 — try next page
+        pageCount++;
+        if (hasNextButton(menu, size) && pageCount < MAX_PAGES) {
+            foundSlot = findNextButton(menu, size);
+            if (foundSlot >= 0) {
                 state = State.NAVIGATE_NEXT;
                 tickCounter = 0;
             } else {
-                error("Item not found in shop: " + targetItem.getDescription().getString()
-                    + ". Checked " + pageCount + " pages.");
+                error("Item not found after " + pageCount + " pages: " + targetItem.getDescription().getString());
             }
+        } else {
+            error("Item not found in shop after " + pageCount + " pages: " + targetItem.getDescription().getString());
+        }
+    }
+
+    /**
+     * Navigates backward until we reach page 1 (no "上一页" button).
+     */
+    private void doGoToFirst(Minecraft client) {
+        if (!checkPlayer(client)) return;
+        AbstractContainerMenu menu = client.player.containerMenu;
+        int size = ContainerUtils.getContainerSize(menu);
+        if (size < 0) {
+            error("Shop container closed");
+            return;
+        }
+        lastContainerId = menu.containerId;
+
+        if (hasDetailViewItems(menu, size)) {
+            clickButtonByText(menu, size, "返回");
+            state = State.WAIT_PREV;
+            tickCounter = 0;
+            return;
+        }
+
+        if (!hasPrevButton(menu, size)) {
+            // We're at page 1 — start scanning
+            LOGGER.info("[shop] At page 1, starting scan");
+            state = State.SCAN_PAGE;
+            tickCounter = 0;
+        } else {
+            int prevSlot = findPrevButton(menu, size);
+            if (prevSlot >= 0) {
+                foundSlot = prevSlot;
+                clickSlot(client, prevSlot);
+                state = State.WAIT_PREV;
+                tickCounter = 0;
+            } else {
+                // No prev button by text but hasPrevButton was true — should not happen
+                state = State.SCAN_PAGE;
+                tickCounter = 0;
+            }
+        }
+    }
+
+    private void doWaitPrev(Minecraft client) {
+        if (tickCounter >= NAV_WAIT_TICKS) {
+            state = State.GO_TO_FIRST;
+            tickCounter = 0;
         }
     }
 
     private void doNavigateNext(Minecraft client) {
         if (!checkPlayer(client)) return;
+        LOGGER.info("[shop] Navigating to next page (page {})", pageCount + 1);
         clickSlot(client, foundSlot);
-        pageCount++;
         state = State.WAIT_NAVIGATE;
         tickCounter = 0;
     }
 
     private void doWaitNavigate(Minecraft client) {
-        if (tickCounter >= WAIT_TICKS) {
+        if (tickCounter >= NAV_WAIT_TICKS) {
             state = State.SCAN_PAGE;
             tickCounter = 0;
         }
     }
 
+    // --- Detail view handling ---
+
     private void doClickItem(Minecraft client) {
         if (!checkPlayer(client)) return;
+        LOGGER.info("[shop] Clicking item at slot {}", foundSlot);
         clickSlot(client, foundSlot);
         state = State.WAIT_DETAIL;
         tickCounter = 0;
     }
 
-    /**
-     * Waits for the detail view to appear.
-     * The detail view is identified by the presence of lime_stained_glass_pane
-     * or red_stained_glass_pane items.
-     */
     private void doWaitDetail(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
@@ -439,24 +503,14 @@ public class ShopExecutor {
         }
         lastContainerId = menu.containerId;
 
-        // Check if detail view has loaded (has lime/red glass panes)
         if (hasDetailViewItems(menu, size)) {
             state = State.SCAN_ACTION;
             tickCounter = 0;
         } else if (tickCounter > DETAIL_WAIT_TICKS * 3) {
-            // Maybe item click didn't open detail — try again
             error("Detail view did not appear after clicking item");
         }
     }
 
-    /**
-     * Scans the detail view for the correct buy/sell button.
-     * <p>
-     * Buy buttons (lime_stained_glass_pane): sorted by slot index → [0]=1, [1]=8, [2]=64
-     * Sell buttons (red_stained_glass_pane): sorted by slot index → [0]=1, [1]=8, [2]=64
-     * Buy-all: chest with "购买全部" in display name
-     * Sell-all: chest with "出售全部" in display name
-     */
     private void doScanAction(Minecraft client) {
         if (!checkPlayer(client)) return;
         AbstractContainerMenu menu = client.player.containerMenu;
@@ -479,14 +533,12 @@ public class ShopExecutor {
             state = State.CLICK_ACTION;
             tickCounter = 0;
         } else {
-            // Fallback: try to find any buy/sell button by display text
             String fallback = isBuyMode ? "购买" : "出售";
             foundSlot = findButtonByText(menu, size, fallback);
             if (foundSlot >= 0) {
                 state = State.CLICK_ACTION;
                 tickCounter = 0;
             } else {
-                // No action button — exit
                 state = State.EXIT_MENU;
                 tickCounter = 0;
             }
@@ -502,7 +554,6 @@ public class ShopExecutor {
 
     private void doWaitAction(Minecraft client) {
         if (tickCounter >= ACTION_WAIT_TICKS) {
-            // After transaction, try to click "退出交易"
             state = State.EXIT_MENU;
             tickCounter = 0;
         }
@@ -514,7 +565,6 @@ public class ShopExecutor {
         int size = ContainerUtils.getContainerSize(menu);
 
         if (size > 0) {
-            // Try "退出交易" first, then "返回", then force-close
             int exitSlot = findButtonByText(menu, size, "退出交易");
             if (exitSlot >= 0) {
                 clickSlot(client, exitSlot);
@@ -531,15 +581,13 @@ public class ShopExecutor {
             }
         }
 
-        // No exit button found — force close
         closeContainer();
         state = State.WAIT_EXIT;
         tickCounter = 0;
     }
 
     private void doWaitExit(Minecraft client) {
-        if (tickCounter >= WAIT_TICKS) {
-            // Ensure container is fully closed
+        if (tickCounter >= NAV_WAIT_TICKS) {
             if (client.player.containerMenu != null
                 && ContainerUtils.getContainerSize(client.player.containerMenu) > 0) {
                 closeContainer();
@@ -557,82 +605,52 @@ public class ShopExecutor {
 
     // ==================== Button finding ====================
 
-    /**
-     * Finds the correct buy button based on count.
-     * Lime stained glass panes are sorted by slot index → [0]=1, [1]=8, [2]=64.
-     * For "all" or count > 64, finds the chest with "购买全部" in name.
-     */
-    private int findBuyButton(AbstractContainerMenu menu, int containerSize, int count) {
-        if (count < 0 || count > 64) {
-            // "all" or very large → find chest "购买全部(背包)"
-            return findButtonByText(menu, containerSize, "购买全部");
-        }
+    private static int findNextButton(AbstractContainerMenu menu, int size) {
+        return findButtonByText(menu, size, "下一页");
+    }
 
-        // Collect all lime_stained_glass_pane slots, sorted by index
-        List<Integer> limeSlots = findSlotsByItem(menu, containerSize, Items.LIME_STAINED_GLASS_PANE);
+    private static int findPrevButton(AbstractContainerMenu menu, int size) {
+        return findButtonByText(menu, size, "上一页");
+    }
+
+    private static boolean hasNextButton(AbstractContainerMenu menu, int size) {
+        return findButtonByText(menu, size, "下一页") >= 0;
+    }
+
+    private static boolean hasPrevButton(AbstractContainerMenu menu, int size) {
+        return findButtonByText(menu, size, "上一页") >= 0;
+    }
+
+    private int findBuyButton(AbstractContainerMenu menu, int size, int count) {
+        if (count < 0 || count > 64) {
+            return findButtonByText(menu, size, "购买全部");
+        }
+        List<Integer> limeSlots = findSlotsByItem(menu, size, Items.LIME_STAINED_GLASS_PANE);
         if (limeSlots.isEmpty()) {
-            // Fallback: try text-based search
-            return findButtonByText(menu, containerSize, "购买");
+            return findButtonByText(menu, size, "购买");
         }
-
-        // Map count to button index: [0]=1, [1]=8, [2]=64
-        int buttonIndex;
-        if (count <= 1) {
-            buttonIndex = 0;
-        } else if (count <= 8) {
-            buttonIndex = 1;
-        } else {
-            buttonIndex = 2;
-        }
-
-        if (buttonIndex < limeSlots.size()) {
-            return limeSlots.get(buttonIndex);
-        }
-        // If not enough buttons, use the last one
-        return limeSlots.get(limeSlots.size() - 1);
+        int idx = count <= 1 ? 0 : count <= 8 ? 1 : 2;
+        return idx < limeSlots.size() ? limeSlots.get(idx) : limeSlots.get(limeSlots.size() - 1);
     }
 
-    /**
-     * Finds the correct sell button based on count.
-     * Red stained glass panes are sorted by slot index → [0]=1, [1]=8, [2]=64.
-     * For "all" or count > 64, finds the chest with "出售全部" in name.
-     */
-    private int findSellButton(AbstractContainerMenu menu, int containerSize, int count) {
+    private int findSellButton(AbstractContainerMenu menu, int size, int count) {
         if (count < 0 || count > 64) {
-            return findButtonByText(menu, containerSize, "出售全部");
+            return findButtonByText(menu, size, "出售全部");
         }
-
-        List<Integer> redSlots = findSlotsByItem(menu, containerSize, Items.RED_STAINED_GLASS_PANE);
+        List<Integer> redSlots = findSlotsByItem(menu, size, Items.RED_STAINED_GLASS_PANE);
         if (redSlots.isEmpty()) {
-            return findButtonByText(menu, containerSize, "出售");
+            return findButtonByText(menu, size, "出售");
         }
-
-        int buttonIndex;
-        if (count <= 1) {
-            buttonIndex = 0;
-        } else if (count <= 8) {
-            buttonIndex = 1;
-        } else {
-            buttonIndex = 2;
-        }
-
-        if (buttonIndex < redSlots.size()) {
-            return redSlots.get(buttonIndex);
-        }
-        return redSlots.get(redSlots.size() - 1);
+        int idx = count <= 1 ? 0 : count <= 8 ? 1 : 2;
+        return idx < redSlots.size() ? redSlots.get(idx) : redSlots.get(redSlots.size() - 1);
     }
 
-    /**
-     * Returns true if the container has items characteristic of the detail view
-     * (lime_stained_glass_pane or red_stained_glass_pane).
-     */
-    private static boolean hasDetailViewItems(AbstractContainerMenu menu, int containerSize) {
-        for (int i = 0; i < containerSize; i++) {
+    private static boolean hasDetailViewItems(AbstractContainerMenu menu, int size) {
+        for (int i = 0; i < size; i++) {
             ItemStack stack = menu.getSlot(i).getItem();
             if (!stack.isEmpty()) {
                 Item item = stack.getItem();
-                if (item == Items.LIME_STAINED_GLASS_PANE
-                    || item == Items.RED_STAINED_GLASS_PANE) {
+                if (item == Items.LIME_STAINED_GLASS_PANE || item == Items.RED_STAINED_GLASS_PANE) {
                     return true;
                 }
             }
@@ -640,12 +658,9 @@ public class ShopExecutor {
         return false;
     }
 
-    /**
-     * Finds all slots containing a specific item type, sorted by slot index.
-     */
-    private static List<Integer> findSlotsByItem(AbstractContainerMenu menu, int containerSize, Item item) {
+    private static List<Integer> findSlotsByItem(AbstractContainerMenu menu, int size, Item item) {
         List<Integer> slots = new ArrayList<>();
-        for (int i = 0; i < containerSize; i++) {
+        for (int i = 0; i < size; i++) {
             ItemStack stack = menu.getSlot(i).getItem();
             if (!stack.isEmpty() && stack.getItem() == item) {
                 slots.add(i);
@@ -655,15 +670,11 @@ public class ShopExecutor {
         return slots;
     }
 
-    /**
-     * Finds a slot whose display name contains the given text.
-     */
-    private static int findButtonByText(AbstractContainerMenu menu, int containerSize, String text) {
-        for (int i = 0; i < containerSize; i++) {
+    private static int findButtonByText(AbstractContainerMenu menu, int size, String text) {
+        for (int i = 0; i < size; i++) {
             ItemStack stack = menu.getSlot(i).getItem();
             if (!stack.isEmpty()) {
-                String displayName = stack.getHoverName().getString();
-                if (displayName.contains(text)) {
+                if (stack.getHoverName().getString().contains(text)) {
                     return i;
                 }
             }
@@ -671,11 +682,8 @@ public class ShopExecutor {
         return -1;
     }
 
-    /**
-     * Clicks a button by text (if found), for navigation/exit without state change.
-     */
-    private void clickButtonByText(AbstractContainerMenu menu, int containerSize, String text) {
-        int slot = findButtonByText(menu, containerSize, text);
+    private void clickButtonByText(AbstractContainerMenu menu, int size, String text) {
+        int slot = findButtonByText(menu, size, text);
         if (slot >= 0) {
             foundSlot = slot;
             Minecraft client = Minecraft.getInstance();
@@ -683,6 +691,17 @@ public class ShopExecutor {
                 clickSlot(client, slot);
             }
         }
+    }
+
+    private static int findItemSlot(AbstractContainerMenu menu, int size, Item target) {
+        int end = Math.min(size - 1, 44);
+        for (int i = 0; i <= end; i++) {
+            ItemStack stack = menu.getSlot(i).getItem();
+            if (!stack.isEmpty() && stack.getItem() == target) {
+                return i;
+            }
+        }
+        return -1;
     }
 
     // ==================== Helpers ====================
@@ -703,6 +722,7 @@ public class ShopExecutor {
             client.player.displayClientMessage(
                 Component.translatable("client-tools.shop.error", msg), false);
         }
+        LOGGER.warn("[shop] ERROR: {}", msg);
     }
 
     private void closeContainer() {
@@ -714,11 +734,6 @@ public class ShopExecutor {
         }
     }
 
-    // getContainerSize and getContainerStateId are now in ContainerUtils (shared utility).
-
-    /**
-     * Clicks a slot with PICKUP action.
-     */
     private void clickSlot(Minecraft client, int slotIndex) {
         if (client.player == null || client.player.connection == null) return;
         int stateId = ContainerUtils.getContainerStateId(client.player.containerMenu);

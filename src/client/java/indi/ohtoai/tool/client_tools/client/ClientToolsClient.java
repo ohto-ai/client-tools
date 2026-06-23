@@ -79,7 +79,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			}
 		});
 
-		// Auto-pause sweep on disconnect to save progress
+		// Auto-pause sweep on disconnect
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			SweepExecutor.getInstance().handleDisconnect();
 		});
