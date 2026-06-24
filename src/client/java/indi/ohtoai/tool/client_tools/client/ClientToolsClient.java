@@ -5,6 +5,10 @@ import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallba
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayConnectionEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.WorldRenderEvents;
+import net.fabricmc.fabric.api.resource.ResourceManagerHelper;
+import net.fabricmc.fabric.api.resource.ResourcePackActivationType;
+import net.fabricmc.loader.api.FabricLoader;
+import net.minecraft.resources.ResourceLocation;
 import indi.ohtoai.tool.client_tools.client.command.CchatCommand;
 import indi.ohtoai.tool.client_tools.client.command.CcraftCommand;
 import indi.ohtoai.tool.client_tools.client.command.CflyCommand;
@@ -14,9 +18,11 @@ import indi.ohtoai.tool.client_tools.client.command.CsellCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
+import indi.ohtoai.tool.client_tools.client.command.CdollCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
+import indi.ohtoai.tool.client_tools.client.doll.DollPackManager;
 import indi.ohtoai.tool.client_tools.client.sequence.SequenceExecutor;
 import indi.ohtoai.tool.client_tools.client.shop.ShopExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
@@ -28,6 +34,21 @@ import net.minecraft.network.chat.Component;
 public class ClientToolsClient implements ClientModInitializer {
 	@Override
 	public void onInitializeClient() {
+		// Pre-create the doll resource pack directory so Minecraft's resource
+		// pack scanner discovers it. Without this, the pack is only picked up
+		// on the second reload after /cdoll add is first used.
+		DollPackManager.initPackDirectory();
+
+		// Register built-in resource pack (furina_doll)
+		FabricLoader.getInstance().getModContainer("client-tools").ifPresent(modContainer -> {
+			ResourceManagerHelper.registerBuiltinResourcePack(
+				ResourceLocation.fromNamespaceAndPath("client-tools", "furina_doll"),
+				modContainer,
+				Component.translatable("resourcePack.client-tools.furina_doll.name"),
+				ResourcePackActivationType.ALWAYS_ENABLED
+			);
+		});
+
 		// Register client commands
 		ClientCommandRegistrationCallback.EVENT.register((dispatcher, registryAccess) -> {
 			CtimerCommand.register(dispatcher);
@@ -39,6 +60,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CsellCommand.register(dispatcher);
 			CsweepCommand.register(dispatcher);
 			CsequenceCommand.register(dispatcher);
+				CdollCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor

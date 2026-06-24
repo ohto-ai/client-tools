@@ -1,0 +1,6 @@
+{
+	"parent": "minecraft:item/template_doll",
+	"textures": {
+		"layer0": "item/totem_of_undying"
+	}
+}
