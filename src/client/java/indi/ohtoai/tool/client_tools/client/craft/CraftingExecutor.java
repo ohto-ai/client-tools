@@ -1049,6 +1049,13 @@ public class CraftingExecutor {
 
         if (productDepositIdx < productDepositSlots.size()) {
             int menuSlot = productDepositSlots.get(productDepositIdx); // direct menu slot index
+            // Bounds check: the container may have changed since slots were scanned
+            // (e.g. shulker box closed/removed, falling back to player inventory with fewer slots)
+            if (menuSlot >= menu.slots.size()) {
+                state = State.RETRY_OUTPUT;
+                tickCounter = 0;
+                return;
+            }
             ItemStack stack = menu.getSlot(menuSlot).getItem();
             if (stack.getItem() == finalProductItem) {
                 quickMove(client, menu.containerId, menuSlot);
