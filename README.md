@@ -29,7 +29,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides eight practical automation tools:**
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides nine practical automation tools:**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -39,6 +39,7 @@ Support Minecraft 1.21～1.21.8
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 - **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
 - **`/cplacement`** — Move Litematica schematic placement along individual axes
+- **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -46,7 +47,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供八个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供九个实用工具：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -56,6 +57,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 - **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
 - **`/cplacement`** — 沿轴向移动 Litematica 投影位置
+- **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -158,6 +160,18 @@ All features run entirely on the client side. No server-side installation is req
 - **`status`** — display current placement/selection information including region count and coordinates
 - **`/cplacement help [subcommand]`** — detailed help for individual subcommands
 - Requires Litematica to be installed
+
+### Furina Doll Resource Pack & `/cdoll` — Dynamic Item Appearance Override
+
+- **Built-in resource pack** — includes a 3D Furina doll model (template_doll) that replaces armor stand, totem of undying, and compass appearances; auto-enabled on mod install
+- **Dynamic item override** — `/cdoll add <item>` applies the doll 3D model to any item, using the original item's texture as the card face
+- Persisted globally to `config/client-tools/dolls.json`; model files auto-generated to `resourcepacks/client-tools-dolls/`
+- Auto-generates resource pack with correct pack format for the current Minecraft version
+- **`/cdoll remove <item>`** — unregister an item
+- **`/cdoll list`** — show all doll-ified items
+- **`/cdoll clear`** — remove all assignments
+- **`/cdoll help [subcommand]`** — detailed help with tab-completion
+- The doll model system uses a parent-child architecture: `template_doll` defines the 3D geometry, child models only need to specify `parent` and `layer0` texture
 
 ---
 
@@ -437,6 +451,25 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 
 **Requirements:** Litematica must be installed and a schematic must be loaded.
+
+### `/cdoll` Quick Start
+
+```
+--- Help ---
+/cdoll help                  — Show full help
+/cdoll help <subcommand>     — Show detailed help for a subcommand
+
+--- Manage doll items ---
+/cdoll add minecraft:diamond — Apply doll model to diamond
+/cdoll add stick             — Apply doll model to stick (bare name = minecraft:stick)
+/cdoll remove stick          — Remove doll appearance from stick
+/cdoll list                  — Show all doll-ified items
+/cdoll clear                 — Remove all doll assignments
+```
+
+**Tab-completion:** `add` suggests all registered item IDs. `remove` suggests only items currently in the doll list.
+
+**How it works:** Each doll-ified item gets a model JSON file generated under `resourcepacks/client-tools-dolls/`. The file inherits from `minecraft:item/template_doll` (provided by the built-in furina_doll pack) and sets `layer0` to the original item's texture. Resource packs are automatically reloaded after each change.
 
 ---
 
