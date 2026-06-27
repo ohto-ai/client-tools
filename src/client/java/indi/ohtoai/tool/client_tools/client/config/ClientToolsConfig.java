@@ -20,6 +20,8 @@ public final class ClientToolsConfig {
         .resolve("client-tools").resolve("global.json");
 
     private static boolean autoJump = false;
+    private static boolean cbowEnabled = false;
+    private static boolean criptideEnabled = false;
     private static boolean loaded = false;
 
     private ClientToolsConfig() {}
@@ -27,6 +29,8 @@ public final class ClientToolsConfig {
     @SuppressWarnings("unused")
     private static class Data {
         boolean autoJump;
+        boolean cbowEnabled;
+        boolean criptideEnabled;
     }
 
     private static void ensureLoaded() {
@@ -37,6 +41,8 @@ public final class ClientToolsConfig {
             Data data = GSON.fromJson(Files.readString(CONFIG_PATH), Data.class);
             if (data != null) {
                 autoJump = data.autoJump;
+                cbowEnabled = data.cbowEnabled;
+                criptideEnabled = data.criptideEnabled;
             }
         } catch (IOException ignored) {}
     }
@@ -52,9 +58,33 @@ public final class ClientToolsConfig {
         save();
     }
 
+    public static boolean isCbowEnabled() {
+        ensureLoaded();
+        return cbowEnabled;
+    }
+
+    public static void setCbowEnabled(boolean v) {
+        ensureLoaded();
+        cbowEnabled = v;
+        save();
+    }
+
+    public static boolean isCriptideEnabled() {
+        ensureLoaded();
+        return criptideEnabled;
+    }
+
+    public static void setCriptideEnabled(boolean v) {
+        ensureLoaded();
+        criptideEnabled = v;
+        save();
+    }
+
     private static void save() {
         Data data = new Data();
         data.autoJump = autoJump;
+        data.cbowEnabled = cbowEnabled;
+        data.criptideEnabled = criptideEnabled;
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
             Files.writeString(CONFIG_PATH, GSON.toJson(data));

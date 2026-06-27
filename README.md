@@ -9,13 +9,17 @@ Support Minecraft 1.21～1.21.8
 
 **客户端自动化工具集 / A collection of client-side automation tools.**
 
-<img width="2560" height="1377" alt="7fe4acbdf125410e25bd768afcf20fcd" src="https://github.com/user-attachments/assets/135edae1-570c-40a3-9c61-c5179f33fb2f" />
+![Screenshot 1](https://github.com/user-attachments/assets/135edae1-570c-40a3-9c61-c5179f33fb2f)
+*Sweep path preview with highlight overlay*
 
-<img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/185dd107-1aa6-43c7-88ce-6ce60d59d488" />
+![Screenshot 2](https://github.com/user-attachments/assets/185dd107-1aa6-43c7-88ce-6ce60d59d488)
+*Arrow trajectory prediction with landing marker*
 
-<img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/decb09da-84e7-4769-98fd-bcdb259610b7" />
+![Screenshot 3](https://github.com/user-attachments/assets/decb09da-84e7-4769-98fd-bcdb259610b7)
+*Crafting station highlight with input/output containers*
 
-<img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/74f70c4d-55c5-4713-8bdf-fa5ed3db4862" />
+![Screenshot 4](https://github.com/user-attachments/assets/74f70c4d-55c5-4713-8bdf-fa5ed3db4862)
+*Furina doll 3D model applied to items via /cdoll*
 
 ---
 
@@ -31,7 +35,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides eleven practical automation tools:**
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides 12 client commands (grouped into 11 functional modules):**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -51,7 +55,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供十一个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供 12 个客户端命令（功能上分为 11 个模块）：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -104,7 +108,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`status`** — check flight permission, active state, gamemode, and auto-jump setting
 - **`/cfly help [subcommand]`** — detailed help for individual subcommands
 - Automatically syncs abilities to the server
-- Auto-jump setting persists in `config/client-tools/global.json`
+- Auto-jump setting persists in `config/client-tools/global.json` (along with `/cbow` and `/criptide` toggle states)
 
 ### `/csweep` — Snake-Pattern Area Traversal
 
@@ -177,6 +181,7 @@ All features run entirely on the client side. No server-side installation is req
 - 3D landing marker with crosshair, ring, and beacon line for high visibility
 - Distance label at the landing point
 - Simple toggle command with status display showing weapon info, charge %, and enchantments
+- Toggle state persists in `config/client-tools/global.json` across game restarts
 
 ### `/criptide` — Riptide Trident Flight Override
 
@@ -185,6 +190,7 @@ All features run entirely on the client side. No server-side installation is req
 - Uses the vanilla `TridentItem` code path for authentic Riptide velocity and spin animation
 - Simple toggle command with status display showing held trident and Riptide enchantment level
 - **`/criptide help [subcommand]`** — detailed help for `on`, `off`, `status`
+- Toggle state persists in `config/client-tools/global.json` across game restarts
 
 ### Furina Doll Resource Pack & `/cdoll` — Dynamic Item Appearance Override
 
@@ -197,6 +203,74 @@ All features run entirely on the client side. No server-side installation is req
 - **`/cdoll clear`** — remove all assignments
 - **`/cdoll help [subcommand]`** — detailed help with tab-completion
 - The doll model system uses a parent-child architecture: `template_doll` defines the 3D geometry, child models only need to specify `parent` and `layer0` texture
+
+---
+
+## ModMenu 与 Cloth Config 配置界面 / ModMenu & Cloth Config GUI
+
+本模组集成 ModMenu，安装后可获得图形化配置界面，无需手动编辑 JSON。
+
+### 使用方法
+
+1. 安装 [ModMenu](https://modrinth.com/mod/modmenu) 和 [Cloth Config](https://modrinth.com/mod/cloth-config)（均为可选依赖）
+2. 打开「模组」界面
+3. 找到 **Client Tools**
+4. 点击齿轮按钮 ⚙️，打开配置界面
+
+### 配置分类
+
+| 分类 | 设置项 |
+|------|--------|
+| **Flight** | 飞行开关、自动起跳 |
+| **Craft** | 合成产品（product）、合成原料（source）、工位/输入/输出容器位置、重复合成数量 |
+| **Sweep** | 扫掠半径、移动速度、自适应速度（autospeed）、速度上限（maxspeed）、避水（avoidwater）、方块检测（blockdetect）、Litematica 同步 |
+| **Display** | 描边线框（outline）、路径预览（path）、层级强调（layer）、方向箭头（dir） |
+| **Timer** | 当前活跃的定时器列表 |
+| **Status** | 当前扫掠进度、合成运行状态 |
+
+所有修改实时生效，关闭界面时自动保存。
+
+### Usage
+
+1. Install [ModMenu](https://modrinth.com/mod/modmenu) and [Cloth Config](https://modrinth.com/mod/cloth-config) (both optional)
+2. Open the Mods screen
+3. Find **Client Tools**
+4. Click the gear icon ⚙️ to open the config GUI
+
+Categories: **Flight**, **Craft**, **Sweep**, **Display**, **Timer**, **Status**. All changes take effect immediately.
+
+---
+
+## 配置文件参考 / Configuration Files
+
+所有配置文件均位于 `config/client-tools/` 目录下。无需手动编辑 —— 绝大多数设置可通过命令或 ModMenu 图形界面修改。
+
+| 文件 | 关联命令 | 用途 |
+|------|----------|------|
+| `global.json` | `/cfly`, `/cbow`, `/criptide` | 全局持久化设置 |
+| `sequences/` | `/csequence` | mcfunction 序列文件（`.mcfunction`） |
+| `dolls.json` | `/cdoll` | 物品-娃娃模型映射列表 |
+| `sweep/<world-id>.json` | `/csweep` | 扫掠暂停进度（按世界分别保存） |
+
+### global.json
+
+跨会话持久化的全局设置：
+
+```json
+{
+  "autoJump": false,
+  "cbowEnabled": false,
+  "criptideEnabled": false
+}
+```
+
+| 字段 | 对应命令 | 说明 |
+|------|----------|------|
+| `autoJump` | `/cfly jump` | 飞行时自动起跳 |
+| `cbowEnabled` | `/cbow` | 箭矢轨迹预测开关状态 |
+| `criptideEnabled` | `/criptide` | 激流三叉戟覆盖开关状态 |
+
+每次通过命令修改这些设置时，`global.json` 会自动更新。重启游戏后设置保持不变。
 
 ---
 
@@ -491,7 +565,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /cbow status                  — Show current state, weapon type, charge %, enchantments
 ```
 
-**Usage:** Hold a bow and draw it (or hold a loaded crossbow). A dotted golden parabola shows the predicted arrow path in real-time. The landing point is marked with a prominent crosshair marker. If the arrow would hit an entity, the entire trajectory turns green and a diamond marker appears at the impact point. Multishot bows/crossbows show 3 trajectories.
+**Usage:** Hold a bow and draw it (or hold a loaded crossbow). A dotted golden parabola shows the predicted arrow path in real-time. The landing point is marked with a prominent crosshair marker. If the arrow would hit an entity, the entire trajectory turns green and a diamond marker appears at the impact point. Multishot bows/crossbows show 3 trajectories. The toggle state persists across game restarts in `config/client-tools/global.json`.
 
 ### `/criptide` Quick Start
 
@@ -507,7 +581,7 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /criptide status                 — Show current state, held trident, Riptide level
 ```
 
-**Usage:** Hold a trident with the Riptide enchantment, enable the override with `/criptide on`, then right-click and release to launch. Works anywhere regardless of biome, weather, or sky access. The vanilla game code handles the spin attack, velocity, and sound effects.
+**Usage:** Hold a trident with the Riptide enchantment, enable the override with `/criptide on`, then right-click and release to launch. Works anywhere regardless of biome, weather, or sky access. The vanilla game code handles the spin attack, velocity, and sound effects. The toggle state persists across game restarts in `config/client-tools/global.json`.
 
 ### `/cdoll` Quick Start
 
@@ -551,10 +625,22 @@ Output JAR: `build/libs/client-tools-*.jar`
 
 ## Dependencies
 
-- Minecraft 1.21～1.21.8
-- Fabric Loader >= 0.16.10
-- Fabric API
-- Java >= 21
+### Required
+
+| Dependency | Version |
+|------------|---------|
+| Minecraft | 1.21～1.21.8 |
+| Fabric Loader | >= 0.16.10 |
+| Fabric API | * |
+| Java | >= 21 |
+
+### Optional (Recommended)
+
+| Dependency | Purpose |
+|------------|---------|
+| [ModMenu](https://modrinth.com/mod/modmenu) | Adds a config button in the Mods screen |
+| [Cloth Config](https://modrinth.com/mod/cloth-config) | Graphical settings GUI (Flight, Craft, Sweep, Display, Timer, Status) |
+| [Litematica](https://modrinth.com/mod/litematica) | Enables `/cplacement` and Litematica integration for `/csweep` |
 
 ---
 

@@ -60,6 +60,10 @@ public class BowTrajectoryRenderer {
     private static final double WATER_DRAG      = 0.6;
     private static final double MULTISHOT_ANGLE = 10.0;
 
+    // ── Spread / inaccuracy (vanilla Projectile mechanics) ──────
+    /** Vanilla {@code Projectile.SHOOTING_SCALE} — also the ~95 % CI angular radius for the 2D spread. */
+    private static final double SHOOTING_SCALE = 0.007499999832361937;
+
     // ── Dotted-line detail ─────────────────────────────────────
     /** World-space distance between interpolated points. */
     private static final double SUB_STEP       = 0.2;
@@ -228,6 +232,13 @@ public class BowTrajectoryRenderer {
                     double dist = landing.distanceTo(client.player.getEyePosition());
                     renderLandingLabel(poseStack, camPos, camera, client, consumers,
                         landing, dist);
+
+                    // Spread ellipse at landing (only when no entity blocks the shot)
+                    if (hitFace != null && entity == null) {
+                        float[] ellipseRgb = colorToRGB(0xFFDD66);
+                        renderSpreadEllipse(poseStack, camPos, landing, hitFace,
+                            dist, ellipseRgb, 0.32f);
+                    }
                 }
             }
         }
@@ -713,6 +724,92 @@ public class BowTrajectoryRenderer {
             0x40000000,
             LightTexture.FULL_BRIGHT);
 
+        poseStack.popPose();
+    }
+
+    // ==================== Spread ellipse ====================
+
+    /**
+     * Renders a spread ellipse at the landing point, oriented in the plane
+     * of the hit face.
+     *
+     * <p>The angular radius used is {@code SHOOTING_SCALE} (≈ 0.0075 rad),
+     * which is the ~95 % confidence interval for the 2D vanilla arrow spread.
+     */
+    private static void renderSpreadEllipse(PoseStack poseStack, Vec3 camPos,
+                                             Vec3 landing, Direction hitFace,
+                                             double distance, float[] rgb, float alpha) {
+        float cr = rgb[0], cg = rgb[1], cb = rgb[2];
+
+        // Offset outward from the hit face to prevent z-fighting
+        float ox = (float) hitFace.getStepX() * 0.10f;
+        float oy = (float) hitFace.getStepY() * 0.10f;
+        float oz = (float) hitFace.getStepZ() * 0.10f;
+
+        float cx = (float)(landing.x - camPos.x) + ox;
+        float cy = (float)(landing.y - camPos.y) + oy;
+        float cz = (float)(landing.z - camPos.z) + oz;
+
+        double radius = distance * SHOOTING_SCALE;
+        if (radius < 0.12) radius = 0.12; // minimum visibility at close range
+
+        // Two perpendicular vectors spanning the hit-face plane
+        float ux, uy, uz, vx, vy, vz;
+        if (hitFace.getAxis() == Direction.Axis.Y) {
+            // Horizontal face → ellipse in the XZ (ground) plane
+            ux = 1; uy = 0; uz = 0;
+            vx = 0; vy = 0; vz = 1;
+        } else {
+            // Vertical face → u is horizontal, v is vertical within the wall plane
+            int sx = hitFace.getStepX();
+            int sz = hitFace.getStepZ();
+            double len = Math.sqrt(sx * sx + sz * sz);
+            ux = (float)( sz / len); uy = 0; uz = (float)(-sx / len);
+            vx = 0;               vy = 1; vz = 0;
+        }
+
+        poseStack.pushPose();
+        RenderSystem.enableBlend();
+        RenderSystem.defaultBlendFunc();
+        RenderSystem.disableDepthTest();
+        RenderSystem.lineWidth(2.0f);
+        RenderSystem.setShader(GameRenderer::getPositionColorShader);
+
+        Matrix4f matrix = poseStack.last().pose();
+        Tesselator tesselator = Tesselator.getInstance();
+        BufferBuilder builder = tesselator.begin(
+            VertexFormat.Mode.DEBUG_LINES, DefaultVertexFormat.POSITION_COLOR);
+
+        float r = (float) radius;
+        int segments = 32;
+
+        // Ring — individual segments for reliability across renderers
+        float prevPx = cx + ux * r;
+        float prevPy = cy + uy * r;
+        float prevPz = cz + uz * r;
+        for (int i = 1; i <= segments; i++) {
+            double angle = 2.0 * Math.PI * i / segments;
+            float ca = (float) Math.cos(angle);
+            float sa = (float) Math.sin(angle);
+            float px = cx + ux * ca * r + vx * sa * r;
+            float py = cy + uy * ca * r + vy * sa * r;
+            float pz = cz + uz * ca * r + vz * sa * r;
+            line(builder, matrix, prevPx, prevPy, prevPz, px, py, pz, cr, cg, cb, alpha);
+            prevPx = px; prevPy = py; prevPz = pz;
+        }
+
+        // Crosshair axes through the ellipse centre
+        line(builder, matrix,
+            cx - ux * r, cy - uy * r, cz - uz * r,
+            cx + ux * r, cy + uy * r, cz + uz * r, cr, cg, cb, alpha * 0.7f);
+        line(builder, matrix,
+            cx - vx * r, cy - vy * r, cz - vz * r,
+            cx + vx * r, cy + vy * r, cz + vz * r, cr, cg, cb, alpha * 0.7f);
+
+        safeDraw(builder);
+        RenderSystem.enableDepthTest();
+        RenderSystem.disableBlend();
+        RenderSystem.lineWidth(1.0f);
         poseStack.popPose();
     }
 

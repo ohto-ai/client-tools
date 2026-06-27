@@ -1,28 +1,28 @@
 package indi.ohtoai.tool.client_tools.client.bow;
 
+import indi.ohtoai.tool.client_tools.client.config.ClientToolsConfig;
+
 /**
  * Runtime toggle state for the /cbow arrow trajectory prediction feature.
  *
- * <p>No persistence — resets to off each session. Follows the simple static
- * getter/setter pattern used by {@code ClientToolsConfig}.
+ * <p>Persisted via {@link ClientToolsConfig} to {@code config/client-tools/global.json}.
  */
 public class BowTrajectoryState {
-
-    private static boolean enabled = false;
 
     private BowTrajectoryState() {}
 
     public static boolean isEnabled() {
-        return enabled;
+        return ClientToolsConfig.isCbowEnabled();
     }
 
     public static void setEnabled(boolean v) {
-        enabled = v;
+        ClientToolsConfig.setCbowEnabled(v);
     }
 
     /** Toggle on/off, returns the new state. */
     public static boolean toggle() {
-        enabled = !enabled;
-        return enabled;
+        boolean now = !ClientToolsConfig.isCbowEnabled();
+        ClientToolsConfig.setCbowEnabled(now);
+        return now;
     }
 }
