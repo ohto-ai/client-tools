@@ -18,6 +18,8 @@ import indi.ohtoai.tool.client_tools.client.command.CsellCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
+import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
+import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
 import indi.ohtoai.tool.client_tools.client.command.CdollCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
@@ -61,6 +63,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CsweepCommand.register(dispatcher);
 			CsequenceCommand.register(dispatcher);
 				CdollCommand.register(dispatcher);
+				CbowCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor
@@ -72,12 +75,14 @@ public class ClientToolsClient implements ClientModInitializer {
 			ShopExecutor.getInstance().tick(client);
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
+				BowTrajectoryRenderer.tick();
 		});
 
 		// Register world render callback for block highlight overlay
 		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> {
 			CcraftHighlightRenderer.render(context);
 			SweepHighlightRenderer.render(context);
+				BowTrajectoryRenderer.render(context);
 		});
 
 		// Auto-show highlight on world join when positions are already configured

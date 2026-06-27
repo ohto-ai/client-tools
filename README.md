@@ -29,7 +29,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides nine practical automation tools:**
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides ten practical automation tools:**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -39,6 +39,7 @@ Support Minecraft 1.21～1.21.8
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 - **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
 - **`/cplacement`** — Move Litematica schematic placement along individual axes
+- **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, and entity-hit detection
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
 
 All features run entirely on the client side. No server-side installation is required.
@@ -47,7 +48,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供九个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供十个实用工具：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -57,6 +58,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 - **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
 - **`/cplacement`** — 沿轴向移动 Litematica 投影位置
+- **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击和实体命中检测
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
 
 所有功能均完全在客户端运行，无需服务端安装。
@@ -160,6 +162,17 @@ All features run entirely on the client side. No server-side installation is req
 - **`status`** — display current placement/selection information including region count and coordinates
 - **`/cplacement help [subcommand]`** — detailed help for individual subcommands
 - Requires Litematica to be installed
+
+### `/cbow` — Arrow Trajectory Prediction
+
+- Real-time parabolic trajectory display while charging a bow or holding a loaded crossbow
+- Clean dotted trajectory line with configurable color
+- **Multishot support** — shows 3 trajectories fanned at ±10° for both crossbows and custom server bows
+- **Entity-hit detection** — trajectory and marker turn green when an arrow would hit a living entity
+- **Face-aligned landing markers** — markers orient perpendicular to the hit surface (horizontal on ground, vertical on walls)
+- 3D landing marker with crosshair, ring, and beacon line for high visibility
+- Distance label at the landing point
+- Simple toggle command with status display showing weapon info, charge %, and enchantments
 
 ### Furina Doll Resource Pack & `/cdoll` — Dynamic Item Appearance Override
 
@@ -451,6 +464,22 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 
 **Requirements:** Litematica must be installed and a schematic must be loaded.
+
+### `/cbow` Quick Start
+
+```
+--- Help ---
+/cbow                         — Toggle arrow trajectory prediction on/off
+/cbow help                    — Show help information
+/cbow help <subcommand>       — Show detailed help for on/off/status
+
+--- Control ---
+/cbow on                      — Enable trajectory prediction
+/cbow off                     — Disable trajectory prediction
+/cbow status                  — Show current state, weapon type, charge %, enchantments
+```
+
+**Usage:** Hold a bow and draw it (or hold a loaded crossbow). A dotted golden parabola shows the predicted arrow path in real-time. The landing point is marked with a prominent crosshair marker. If the arrow would hit an entity, the entire trajectory turns green and a diamond marker appears at the impact point. Multishot bows/crossbows show 3 trajectories.
 
 ### `/cdoll` Quick Start
 
