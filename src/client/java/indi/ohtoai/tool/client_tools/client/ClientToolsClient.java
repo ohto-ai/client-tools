@@ -20,6 +20,7 @@ import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
 import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
+import indi.ohtoai.tool.client_tools.client.command.CriptideCommand;
 import indi.ohtoai.tool.client_tools.client.command.CdollCommand;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
@@ -64,6 +65,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CsequenceCommand.register(dispatcher);
 				CdollCommand.register(dispatcher);
 				CbowCommand.register(dispatcher);
+				CriptideCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor

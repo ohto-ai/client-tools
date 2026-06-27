@@ -31,7 +31,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides ten practical automation tools:**
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides eleven practical automation tools:**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -42,6 +42,7 @@ Support Minecraft 1.21～1.21.8
 - **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
 - **`/cplacement`** — Move Litematica schematic placement along individual axes
 - **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, and entity-hit detection
+- **`/criptide`** — Override the water/rain requirement for Riptide tridents, enabling flight in deserts, caves, and under roofs
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
 
 All features run entirely on the client side. No server-side installation is required.
@@ -50,7 +51,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供十个实用工具：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供十一个实用工具：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -61,6 +62,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
 - **`/cplacement`** — 沿轴向移动 Litematica 投影位置
 - **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击和实体命中检测
+- **`/criptide`** — 覆盖激流三叉戟的水/雨限制，在沙漠、洞穴、屋檐下等任意位置均可飞行
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
 
 所有功能均完全在客户端运行，无需服务端安装。
@@ -175,6 +177,14 @@ All features run entirely on the client side. No server-side installation is req
 - 3D landing marker with crosshair, ring, and beacon line for high visibility
 - Distance label at the landing point
 - Simple toggle command with status display showing weapon info, charge %, and enchantments
+
+### `/criptide` — Riptide Trident Flight Override
+
+- Overrides the `isInWaterOrRain()` check so Riptide tridents work in any biome or location
+- Works in deserts, caves, under roofs — anywhere without water or rain access
+- Uses the vanilla `TridentItem` code path for authentic Riptide velocity and spin animation
+- Simple toggle command with status display showing held trident and Riptide enchantment level
+- **`/criptide help [subcommand]`** — detailed help for `on`, `off`, `status`
 
 ### Furina Doll Resource Pack & `/cdoll` — Dynamic Item Appearance Override
 
@@ -482,6 +492,22 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 ```
 
 **Usage:** Hold a bow and draw it (or hold a loaded crossbow). A dotted golden parabola shows the predicted arrow path in real-time. The landing point is marked with a prominent crosshair marker. If the arrow would hit an entity, the entire trajectory turns green and a diamond marker appears at the impact point. Multishot bows/crossbows show 3 trajectories.
+
+### `/criptide` Quick Start
+
+```
+--- Help ---
+/criptide                        — Toggle Riptide override on/off
+/criptide help                   — Show help information
+/criptide help <subcommand>      — Show detailed help for on/off/status
+
+--- Control ---
+/criptide on                     — Enable Riptide override
+/criptide off                    — Disable Riptide override
+/criptide status                 — Show current state, held trident, Riptide level
+```
+
+**Usage:** Hold a trident with the Riptide enchantment, enable the override with `/criptide on`, then right-click and release to launch. Works anywhere regardless of biome, weather, or sky access. The vanilla game code handles the spin attack, velocity, and sound effects.
 
 ### `/cdoll` Quick Start
 
