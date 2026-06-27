@@ -7,7 +7,9 @@ Support Minecraft 1.21～1.21.8
 
 **[Download on Modrinth](https://modrinth.com/mod/client-tools)** | **[Download on CurseForge](https://www.curseforge.com/minecraft/mc-mods/client-tools)**
 
-**客户端自动化工具集：自动合成、定时调度、快捷聊天、飞行控制、蛇形扫掠 / A collection of client-side automation tools: auto crafting, timed scheduler, quick chat, flight toggle, and snake-pattern area traversal.**
+**客户端自动化工具集 / A collection of client-side automation tools.**
+
+<img width="2560" height="1377" alt="7fe4acbdf125410e25bd768afcf20fcd" src="https://github.com/user-attachments/assets/135edae1-570c-40a3-9c61-c5179f33fb2f" />
 
 <img width="2560" height="1377" alt="image" src="https://github.com/user-attachments/assets/185dd107-1aa6-43c7-88ce-6ce60d59d488" />
 
