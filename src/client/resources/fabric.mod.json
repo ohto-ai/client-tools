@@ -3,7 +3,7 @@
     "id": "client-tools",
     "version": "${version}",
     "name": "Client Tools",
-    "description": "A collection of client-side automation tools: /ccraft (auto-crafting chain), /ctimer (command scheduler), /cchat (quick chat), /cfly (flight), /csweep (area traversal), /csequence (sequence executor), /cbuy / /csell (shop automation), /cplacement (schematic mover), /cbow (arrow trajectory prediction), /criptide (riptide override), /cdoll (item 3D model).",
+    "description": "A collection of client-side automation tools: /ccraft (auto-crafting chain), /ctimer (command scheduler), /cchat (quick chat), /cfly (flight), /csweep (area traversal), /csequence (sequence executor), /cbuy / /csell (shop automation), /clitematica (schematic mover & follower), /cbow (arrow trajectory prediction), /criptide (riptide override), /cdoll (item 3D model).",
     "authors": [
         "Ohto-Ai"
     ],

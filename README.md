@@ -44,7 +44,7 @@ Support Minecraft 1.21～1.21.8
 - **`/csweep`** — Snake-pattern area traversal for automated clearing (works with Litematica-printer)
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 - **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
-- **`/cplacement`** — Move Litematica schematic placement along individual axes
+- **`/clitematica`** — Litematica selection tools: shift placement along axes, or make it follow player movement in real time
 - **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, and entity-hit detection
 - **`/criptide`** — Override the water/rain requirement for Riptide tridents, enabling flight in deserts, caves, and under roofs
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
@@ -64,7 +64,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/csweep`** — 蛇形扫掠区域遍历，搭配投影打印机实现区域清空
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 - **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
-- **`/cplacement`** — 沿轴向移动 Litematica 投影位置
+- **`/clitematica`** — Litematica 选区工具：沿轴移动投影，或使选区实时跟随玩家移动
 - **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击和实体命中检测
 - **`/criptide`** — 覆盖激流三叉戟的水/雨限制，在沙漠、洞穴、屋檐下等任意位置均可飞行
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
@@ -163,12 +163,15 @@ All features run entirely on the client side. No server-side installation is req
 - Tab-completion for item names (Chinese and English/Minecraft IDs)
 - **`/cbuy help`** / **`/csell help`** — show help information
 
-### `/cplacement` — Litematica Placement Movement
+### `/clitematica` — Litematica Selection Tools
 
-- Move Litematica schematic placement along individual axes
-- **`x` / `y` / `z`** — move placement by a specified amount along that axis
-- **`status`** — display current placement/selection information including region count and coordinates
-- **`/cplacement help [subcommand]`** — detailed help for individual subcommands
+- **`shift x <amount>` / `y <amount>` / `z <amount>`** — move the Litematica selection along individual axes
+- **`shift status`** — display current selection information including region count and coordinates
+- **`follow start`** — begin real-time following: records the player→selection offset and moves the selection as the player moves
+- **`follow stop`** — stop following; the selection stays at its current position
+- **`follow status`** — show current follow state: offset, reference positions, axis locks
+- **`follow axis <x|y|z> <lock|unlock>`** — lock or unlock individual axes to constrain selection movement (e.g., lock Y+Z to only move on X)
+- **`/clitematica help [subcommand]`** — detailed help for `shift` and `follow`
 - Requires Litematica to be installed
 
 ### `/cbow` — Arrow Trajectory Prediction
@@ -530,23 +533,30 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 **Requirements:** A shop GUI must be open. Blocked while crafting or another shop operation is running.
 
-### `/cplacement` Quick Start
+### `/clitematica` Quick Start
 
 ```
 --- Help ---
-/cplacement help              — Show full help
-/cplacement help <subcommand> — Show detailed help for a subcommand
+/clitematica help              — Show full help
+/clitematica help shift        — Show shift subcommand details
+/clitematica help follow       — Show follow subcommand details
 
---- Movement ---
-/cplacement x 5               — Move Litematica placement 5 blocks east (+X)
-/cplacement x -3              — Move placement 3 blocks west (-X)
-/cplacement y 2               — Move placement 2 blocks up (+Y)
-/cplacement y -1              — Move placement 1 block down (-Y)
-/cplacement z 4               — Move placement 4 blocks south (+Z)
-/cplacement z -2              — Move placement 2 blocks north (-Z)
+--- Shift (move selection along axes) ---
+/clitematica shift x 5         — Move selection 5 blocks east (+X)
+/clitematica shift x -3        — Move selection 3 blocks west (-X)
+/clitematica shift y 2         — Move selection 2 blocks up (+Y)
+/clitematica shift y -1        — Move selection 1 block down (-Y)
+/clitematica shift z 4         — Move selection 4 blocks south (+Z)
+/clitematica shift z -2        — Move selection 2 blocks north (-Z)
+/clitematica shift status      — Show current selection info (region count, names, coordinates)
 
---- Status ---
-/cplacement status            — Show current placement info (region count, names, coordinates)
+--- Follow (selection follows player in real time) ---
+/clitematica follow start      — Begin following; records player→selection offset
+/clitematica follow stop       — Stop following; selection stays in place
+/clitematica follow status     — Show offset, reference positions, axis locks
+/clitematica follow axis y lock   — Lock Y axis (selection only moves on X and Z)
+/clitematica follow axis z lock   — Lock Z axis too (selection only moves on X)
+/clitematica follow axis y unlock — Unlock Y axis (resume vertical following)
 ```
 
 **Requirements:** Litematica must be installed and a schematic must be loaded.
@@ -640,7 +650,7 @@ Output JAR: `build/libs/client-tools-*.jar`
 |------------|---------|
 | [ModMenu](https://modrinth.com/mod/modmenu) | Adds a config button in the Mods screen |
 | [Cloth Config](https://modrinth.com/mod/cloth-config) | Graphical settings GUI (Flight, Craft, Sweep, Display, Timer, Status) |
-| [Litematica](https://modrinth.com/mod/litematica) | Enables `/cplacement` and Litematica integration for `/csweep` |
+| [Litematica](https://modrinth.com/mod/litematica) | Enables `/clitematica` and Litematica integration for `/csweep` |
 
 ---
 
