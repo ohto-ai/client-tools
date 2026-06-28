@@ -3,6 +3,7 @@ package indi.ohtoai.tool.client_tools.client.p2p;
 import indi.ohtoai.tool.client_tools.client.config.ClientToolsConfig;
 import net.minecraft.client.Minecraft;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.HoverEvent;
 import net.minecraft.network.protocol.game.ServerboundChatCommandPacket;
 
 import javax.crypto.SecretKey;
@@ -129,7 +130,8 @@ public class P2pChatManager {
         pendingMessages.put(msgId, new Pending(msgId, targetPlayer, plaintext, System.currentTimeMillis()));
 
         // Show local outgoing message
-        sendLocalMessage("client-tools.cencrypt.outgoing", plaintext);
+        sendLocalMessage("client-tools.cencrypt.outgoing",
+            client.getUser().getName(), targetPlayer, plaintext);
 
         // Record in history
         addToHistory(new P2pMessage(targetPlayer, plaintext, Instant.now(),
@@ -237,6 +239,13 @@ public class P2pChatManager {
             String msgId = decrypted.substring(1, 1 + MSG_ID_HEX_LEN);
 
             if (type == 'M') {
+                // If this msgId is already pending, it's our own outgoing
+                // echo arriving through another handler (e.g. handleSystemChat).
+                // Suppress it — the local outgoing display is already shown.
+                if (pendingMessages.containsKey(msgId)) {
+                    return message;
+                }
+
                 // ── Incoming message ──────────────────────────
                 String plaintext = decrypted.substring(1 + MSG_ID_HEX_LEN);
                 addToHistory(new P2pMessage(sender, plaintext, Instant.now(),
@@ -251,7 +260,11 @@ public class P2pChatManager {
                 // ── Delivery acknowledgement ──────────────────
                 Pending pending = pendingMessages.remove(msgId);
                 if (pending != null) {
-                    sendLocalMessage("client-tools.cencrypt.delivered");
+                    sendLocalComponent(
+                    Component.translatable("client-tools.cencrypt.delivered", pending.target())
+                        .withStyle(s -> s.withHoverEvent(
+                            new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal(pending.plaintext())))));
                 }
                 return message; // don't display ACKs in chat
             }
@@ -280,7 +293,11 @@ public class P2pChatManager {
             Pending p = iter.next();
             if (now - p.sentAt() > ACK_TIMEOUT_MS) {
                 iter.remove();
-                sendLocalMessage("client-tools.cencrypt.not_delivered", p.target());
+                sendLocalComponent(
+                    Component.translatable("client-tools.cencrypt.not_delivered", p.target())
+                        .withStyle(s -> s.withHoverEvent(
+                            new HoverEvent(HoverEvent.Action.SHOW_TEXT,
+                                Component.literal(p.plaintext())))));
             }
         }
     }
@@ -337,6 +354,13 @@ public class P2pChatManager {
         if (client.player != null) {
             client.player.displayClientMessage(
                 Component.translatable(key, args), false);
+        }
+    }
+
+    private void sendLocalComponent(Component msg) {
+        Minecraft client = Minecraft.getInstance();
+        if (client.player != null) {
+            client.player.displayClientMessage(msg, false);
         }
     }
 }

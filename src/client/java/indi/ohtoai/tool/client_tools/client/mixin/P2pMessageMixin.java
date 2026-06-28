@@ -18,16 +18,13 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 /**
  * Intercepts P2P encrypted whisper messages at the network packet level.
  *
- * <p>Whispers in 1.21 arrive via three possible packet types depending on
- * chat signing state:
+ * <p>Whispers in 1.21 may arrive via these packet types:
  * <ul>
- *   <li>{@code ClientboundDisguisedChatPacket} (signed) —
- *       {@code handleDisguisedChat}</li>
- *   <li>{@code ClientboundSystemChatPacket} (overlay/system) —
- *       {@code handleSystemChat}</li>
- *   <li>{@code ClientboundPlayerChatPacket} (unsigned/not-secure) —
- *       {@code handlePlayerChat}</li>
+ *   <li>{@code ClientboundDisguisedChatPacket} (signed) — handleDisguisedChat</li>
+ *   <li>{@code ClientboundPlayerChatPacket} (unsigned/not-secure) — handlePlayerChat</li>
+ *   <li>{@code ClientboundSystemChatPacket} (system/overlay) — handleSystemChat</li>
  * </ul>
+ * Outgoing echoes are deduplicated by msgId inside P2pChatManager.
  */
 @Mixin(ClientPacketListener.class)
 public class P2pMessageMixin {
@@ -38,14 +35,9 @@ public class P2pMessageMixin {
     @Inject(method = "handleDisguisedChat", at = @At("HEAD"), cancellable = true)
     private void onDisguisedChat(ClientboundDisguisedChatPacket packet, CallbackInfo ci) {
         Component message = packet.message();
-        String text = message.getString();
-
-        if (!text.contains("[CTP2P]")) return;
-
+        if (!message.getString().contains("[CTP2P]")) return;
         ci.cancel();
 
-        // Sender name comes from the chat type metadata — the message text
-        // is just the raw [CTP2P]... payload without a "whispers to you" prefix.
         String sender = packet.chatType().name().getString();
         String localName = Minecraft.getInstance().getUser().getName();
 
@@ -53,39 +45,18 @@ public class P2pMessageMixin {
 
         if (sender.equalsIgnoreCase(localName)) {
             LOGGER.info("[P2P-MIXIN] handleDisguisedChat — outgoing echo, suppressed");
-            return; // sendLocalMessage in sendToPlayer already displayed the clean version
+            return;
         }
 
         processAndDisplay(message, sender);
     }
 
-    @Inject(method = "handleSystemChat", at = @At("HEAD"), cancellable = true)
-    private void onSystemChat(ClientboundSystemChatPacket packet, CallbackInfo ci) {
-        Component message = packet.content();
-        String text = message.getString();
-
-        if (!text.contains("[CTP2P]")) return;
-
-        ci.cancel();
-        LOGGER.info("[P2P-MIXIN] handleSystemChat raw text='{}'", text);
-
-        // System chat messages don't carry sender metadata — fall back to
-        // text-based extraction (may show "???" if the text has no prefix).
-        processAndDisplay(message, null);
-    }
-
     @Inject(method = "handlePlayerChat", at = @At("HEAD"), cancellable = true)
     private void onPlayerChat(ClientboundPlayerChatPacket packet, CallbackInfo ci) {
         Component unsigned = packet.unsignedContent();
-        if (unsigned == null) return;
-
-        String text = unsigned.getString();
-        if (!text.contains("[CTP2P]")) return;
-
+        if (unsigned == null || !unsigned.getString().contains("[CTP2P]")) return;
         ci.cancel();
-        LOGGER.info("[P2P-MIXIN] handlePlayerChat unsigned text='{}'", text);
 
-        // Unsigned player chat may carry sender metadata — try to extract it.
         String sender = packet.chatType().name().getString();
         String localName = Minecraft.getInstance().getUser().getName();
 
@@ -99,15 +70,17 @@ public class P2pMessageMixin {
         processAndDisplay(unsigned, sender);
     }
 
-    /**
-     * Decrypt and display a P2P message.  The vanilla handler has already
-     * been cancelled by the caller.
-     *
-     * @param raw    the raw chat component whose {@code getString()} contains
-     *               {@code [CTP2P]}… (just the payload, no whisper prefix)
-     * @param sender the sender's player name, or {@code null} to fall back to
-     *               text-based extraction inside {@code processIncomingMessage}
-     */
+    @Inject(method = "handleSystemChat", at = @At("HEAD"), cancellable = true)
+    private void onSystemChat(ClientboundSystemChatPacket packet, CallbackInfo ci) {
+        Component message = packet.content();
+        if (!message.getString().contains("[CTP2P]")) return;
+        ci.cancel();
+
+        // System messages don't carry sender metadata — pass null.
+        // Outgoing dedup is handled by msgId check in processIncomingMessage.
+        processAndDisplay(message, null);
+    }
+
     private static void processAndDisplay(Component raw, String sender) {
         P2pChatManager mgr = P2pChatManager.getInstance();
         Component modified = mgr.processIncomingMessage(raw, sender);
@@ -117,7 +90,5 @@ public class P2pMessageMixin {
             client.gui.getChat().addMessage(modified);
             client.getNarrator().sayNow(modified);
         }
-        // If modified == raw, it's a decryption failure — suppress the raw
-        // ciphertext (showing unreadable base64 is useless to the user).
     }
 }
