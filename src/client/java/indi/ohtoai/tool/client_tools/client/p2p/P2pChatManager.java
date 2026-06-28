@@ -251,7 +251,7 @@ public class P2pChatManager {
                 // ── Delivery acknowledgement ──────────────────
                 Pending pending = pendingMessages.remove(msgId);
                 if (pending != null) {
-                    sendLocalMessage("client-tools.cencrypt.delivered", pending.target(), pending.plaintext());
+                    sendLocalMessage("client-tools.cencrypt.delivered");
                 }
                 return message; // don't display ACKs in chat
             }
@@ -280,7 +280,7 @@ public class P2pChatManager {
             Pending p = iter.next();
             if (now - p.sentAt() > ACK_TIMEOUT_MS) {
                 iter.remove();
-                sendLocalMessage("client-tools.cencrypt.not_delivered", p.target(), p.plaintext());
+                sendLocalMessage("client-tools.cencrypt.not_delivered", p.target());
             }
         }
     }
