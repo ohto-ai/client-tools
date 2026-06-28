@@ -7,7 +7,8 @@
 		"SuppressInteractionMixin",
 		"RiptideMixin",
 		"BowTargetMixin",
-		"BowTargetViewMixin"
+		"BowTargetViewMixin",
+		"P2pMessageMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

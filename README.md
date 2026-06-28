@@ -35,7 +35,7 @@ Support Minecraft 1.21～1.21.8
 
 ## Introduction
 
-**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides 12 client commands (grouped into 11 functional modules):**
+**`Client Tools` is a Fabric client-side mod for Minecraft 1.21. It provides 13 client commands (grouped into 12 functional modules):**
 
 - **`/ccraft`** — Automated crafting chain execution with multi-source material scanning and optimal crafting plan generation
 - **`/ctimer`** — Timed command scheduler supporting repetitive execution with configurable intervals and counts
@@ -48,6 +48,7 @@ Support Minecraft 1.21～1.21.8
 - **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, entity-hit detection, and auto-aim targeting
 - **`/criptide`** — Override the water/rain requirement for Riptide tridents, enabling flight in deserts, caves, and under roofs
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
+- **`/cencrypt`** — AES-256-GCM encrypted private chat via `/msg`, with delivery confirmation, group messaging, and key persistence
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -55,7 +56,7 @@ All features run entirely on the client side. No server-side installation is req
 
 ## 简介
 
-`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供 12 个客户端命令（功能上分为 11 个模块）：
+`Client Tools` 是一个适用于 Minecraft 1.21 的 Fabric 客户端模组，提供 13 个客户端命令（功能上分为 12 个模块）：
 
 - **`/ccraft`** — 自动合成链执行，支持多源材料扫描与最优合成计划生成
 - **`/ctimer`** — 定时命令调度器，支持按配置的时间间隔和次数重复执行命令
@@ -68,6 +69,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击、实体命中检测和自动瞄准
 - **`/criptide`** — 覆盖激流三叉戟的水/雨限制，在沙漠、洞穴、屋檐下等任意位置均可飞行
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
+- **`/cencrypt`** — AES-256-GCM 加密私聊，通过 `/msg` 发送加密消息，支持送达确认、群发和密钥持久化
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -255,7 +257,7 @@ Categories: **Flight**, **Craft**, **Sweep**, **Display**, **Timer**, **Status**
 
 | 文件 | 关联命令 | 用途 |
 |------|----------|------|
-| `global.json` | `/cfly`, `/cbow`, `/criptide` | 全局持久化设置 |
+| `global.json` | `/cfly`, `/cbow`, `/criptide`, `/cencrypt` | 全局持久化设置 |
 | `sequences/` | `/csequence` | mcfunction 序列文件（`.mcfunction`） |
 | `dolls.json` | `/cdoll` | 物品-娃娃模型映射列表 |
 | `sweep/<world-id>.json` | `/csweep` | 扫掠暂停进度（按世界分别保存） |
@@ -268,7 +270,8 @@ Categories: **Flight**, **Craft**, **Sweep**, **Display**, **Timer**, **Status**
 {
   "autoJump": false,
   "cbowEnabled": false,
-  "criptideEnabled": false
+  "criptideEnabled": false,
+  "p2pPassword": ""
 }
 ```
 
@@ -626,6 +629,35 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 **Tab-completion:** `add` suggests all registered item IDs. `remove` suggests only items currently in the doll list.
 
 **How it works:** Each doll-ified item gets a model JSON file generated under `resourcepacks/client-tools-dolls/`. The file inherits from `minecraft:item/template_doll` (provided by the built-in furina_doll pack) and sets `layer0` to the original item's texture. Resource packs are automatically reloaded after each change.
+
+### `/cencrypt` — Encrypted Private Chat
+
+```
+--- Help ---
+/cencrypt help                                — Show full help
+/cencrypt help <subcommand>                   — Show detailed help for a subcommand
+
+--- Key setup ---
+/cencrypt key <password>                      — Set the shared encryption password (persisted)
+/cencrypt stop                                — Clear the key
+/cencrypt status                              — Show key status and group info
+
+--- Messaging ---
+/cencrypt msg <player> <message>              — Encrypted message to one player (tab-completes online players)
+/cencrypt group add <player>                  — Add player to group
+/cencrypt group remove <player>              — Remove player from group
+/cencrypt group list                          — Show group members
+/cencrypt group send <message>               — Encrypted message to all online group members
+/cencrypt group clear                         — Remove all group members
+```
+
+**Protocol:** Messages are AES-256-GCM encrypted and sent through vanilla `/msg`. The mod intercepts incoming whispers, detects the `[CTP2P]` marker, decrypts, and displays plaintext. Ciphertext never appears in chat.
+
+**Delivery confirmation:** Each message carries a unique ID. The recipient auto-replies with an ACK. The sender sees `✓ Delivered` on success or `✗ Could not deliver` after a 30-second timeout (offline / wrong key / truncated).
+
+**Key persistence:** The password is saved to `config/client-tools/global.json` and auto-restored on restart. Use `/cencrypt stop` to clear it.
+
+**Undecryptable messages:** If an incoming `[CTP2P]` message can't be decrypted (wrong key, corruption), a visible warning is shown.
 
 ---
 

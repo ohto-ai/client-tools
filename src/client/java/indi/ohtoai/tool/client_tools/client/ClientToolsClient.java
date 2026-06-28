@@ -22,8 +22,10 @@ import indi.ohtoai.tool.client_tools.client.bow.BowTargetHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.bow.BowTargetManager;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
 import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
+import indi.ohtoai.tool.client_tools.client.command.CencryptCommand;
 import indi.ohtoai.tool.client_tools.client.command.CriptideCommand;
 import indi.ohtoai.tool.client_tools.client.command.CdollCommand;
+import indi.ohtoai.tool.client_tools.client.p2p.P2pChatManager;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
 import indi.ohtoai.tool.client_tools.client.craft.CraftingExecutor;
@@ -66,9 +68,10 @@ public class ClientToolsClient implements ClientModInitializer {
 			CsellCommand.register(dispatcher);
 			CsweepCommand.register(dispatcher);
 			CsequenceCommand.register(dispatcher);
-				CdollCommand.register(dispatcher);
-				CbowCommand.register(dispatcher);
-				CriptideCommand.register(dispatcher);
+			CdollCommand.register(dispatcher);
+			CbowCommand.register(dispatcher);
+			CencryptCommand.register(dispatcher);
+			CriptideCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor
@@ -79,18 +82,19 @@ public class ClientToolsClient implements ClientModInitializer {
 			FollowExecutor.getInstance().tick(client);
 			SequenceExecutor.getInstance().tick(client);
 			ShopExecutor.getInstance().tick(client);
+				P2pChatManager.getInstance().tick();
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
-				BowTrajectoryRenderer.tick();
-				BowTargetManager.getInstance().tick(client);
+			BowTrajectoryRenderer.tick();
+			BowTargetManager.getInstance().tick(client);
 		});
 
 		// Register world render callback for block highlight overlay
 		WorldRenderEvents.BEFORE_DEBUG_RENDER.register(context -> {
 			CcraftHighlightRenderer.render(context);
 			SweepHighlightRenderer.render(context);
-				BowTrajectoryRenderer.render(context);
-				BowTargetHighlightRenderer.render(context);
+			BowTrajectoryRenderer.render(context);
+			BowTargetHighlightRenderer.render(context);
 		});
 
 		// Auto-show highlight on world join when positions are already configured
@@ -114,9 +118,10 @@ public class ClientToolsClient implements ClientModInitializer {
 			}
 		});
 
-		// Auto-pause sweep on disconnect
+		// Auto-pause sweep on disconnect; close P2P channels
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			SweepExecutor.getInstance().handleDisconnect();
+			P2pChatManager.getInstance().onDisconnect();
 		});
 	}
 }
