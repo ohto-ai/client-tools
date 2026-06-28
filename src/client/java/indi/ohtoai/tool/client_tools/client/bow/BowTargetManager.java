@@ -59,6 +59,8 @@ public class BowTargetManager {
     private boolean autoMode = false;
     /** Entity selector / player name stored for manual mode (used for status display). */
     private String manualSelector = "";
+    /** When true, compensate for target velocity (lead the target). */
+    private boolean velocityPredict = false;
 
     /** Last-computed desired yaw (degrees), read by the view-rotation mixin. */
     private float desiredYaw;
@@ -98,6 +100,13 @@ public class BowTargetManager {
     public float getDesiredYaw() { return desiredYaw; }
     /** Last-computed pitch for the view-rotation mixin to read. */
     public float getDesiredPitch() { return desiredPitch; }
+    /** Whether velocity prediction (leading) is enabled. */
+    public boolean isVelocityPredictEnabled() { return velocityPredict; }
+    /** Toggle velocity prediction on/off, returning the new state. */
+    public boolean toggleVelocityPredict() {
+        velocityPredict = !velocityPredict;
+        return velocityPredict;
+    }
 
     // ── Command entry points ─────────────────────────────────────
 
@@ -249,8 +258,26 @@ public class BowTargetManager {
         Vec3 spawnPos = getArrowSpawnPos(client.player);
         Vec3 targetPos = getTargetAimPoint(targetEntity);
         double arrowSpeed = getArrowSpeed(client.player, bowItem);
-        double[] aim = calculateAim(spawnPos, targetPos, arrowSpeed);
 
+        // ── Velocity prediction (lead the target) ──────────────
+        if (velocityPredict) {
+            Vec3 targetVel = targetEntity.getDeltaMovement();
+            if (targetVel.lengthSqr() > 0.0001) {
+                // Estimate flight time from direct distance and speed,
+                // with a drag fudge factor.  The iterative refinement
+                // in calculateAim will correct any inaccuracy.
+                double dist = spawnPos.distanceTo(targetPos);
+                double estFlightTime = arrowSpeed > 0.01
+                    ? dist / (arrowSpeed * 0.93)  // 0.93 ≈ average drag
+                    : 0.0;
+                targetPos = targetPos.add(
+                    targetVel.x * estFlightTime,
+                    targetVel.y * estFlightTime,
+                    targetVel.z * estFlightTime);
+            }
+        }
+
+        double[] aim = calculateAim(spawnPos, targetPos, arrowSpeed);
         float yaw = (float) aim[0];
         float pitch = (float) aim[1];
 

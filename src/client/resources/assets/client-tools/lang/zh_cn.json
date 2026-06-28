@@ -67,6 +67,8 @@
   "client-tools.cbow.target.self_target": "§c不能瞄准自己。",
   "client-tools.cbow.target.invalid_selector": "§c无效的实体选择器: %s",
   "client-tools.cbow.target.status": "§a目标: §e%s §7(%s)",
+  "client-tools.cbow.target.predict_on": "§a移动预判已开启§a。箭矢将根据目标当前速度计算提前量。",
+  "client-tools.cbow.target.predict_off": "§e移动预判已关闭§e。瞄准目标当前位置。",
 
   "client-tools.cdoll.added": "§a已添加娃娃外观: §e%s",
   "client-tools.cdoll.removed": "§a已移除娃娃外观: §e%s",

@@ -67,6 +67,8 @@
   "client-tools.cbow.target.self_target": "§cCannot target yourself.",
   "client-tools.cbow.target.invalid_selector": "§cInvalid entity selector: %s",
   "client-tools.cbow.target.status": "§aTarget: §e%s §7(%s)",
+  "client-tools.cbow.target.predict_on": "§aVelocity prediction §aON§a. Arrow will lead the target based on its current velocity.",
+  "client-tools.cbow.target.predict_off": "§eVelocity prediction §eOFF§e. Aiming at target's current position.",
 
   "client-tools.cdoll.added": "§aDoll appearance added for: §e%s",
   "client-tools.cdoll.removed": "§aDoll appearance removed for: §e%s",
