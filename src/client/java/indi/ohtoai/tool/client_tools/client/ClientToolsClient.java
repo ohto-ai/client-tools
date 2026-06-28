@@ -18,6 +18,7 @@ import indi.ohtoai.tool.client_tools.client.command.CsellCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
+import indi.ohtoai.tool.client_tools.client.bow.BowTargetManager;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
 import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
 import indi.ohtoai.tool.client_tools.client.command.CriptideCommand;
@@ -80,6 +81,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
 				BowTrajectoryRenderer.tick();
+				BowTargetManager.getInstance().tick(client);
 		});
 
 		// Register world render callback for block highlight overlay

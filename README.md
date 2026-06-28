@@ -45,7 +45,7 @@ Support Minecraft 1.21～1.21.8
 - **`/csequence`** — mcfunction sequence editor and executor with external editor support, nesting, and looping
 - **`/cbuy` / `/csell`** — Shop automation for buying/selling items through container-based shops
 - **`/clitematica`** — Litematica selection tools: shift placement along axes, or make it follow player movement in real time
-- **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, and entity-hit detection
+- **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, entity-hit detection, and auto-aim targeting
 - **`/criptide`** — Override the water/rain requirement for Riptide tridents, enabling flight in deserts, caves, and under roofs
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
 
@@ -65,7 +65,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/csequence`** — mcfunction 序列编辑器与执行器，支持外部编辑器、嵌套调用和循环
 - **`/cbuy` / `/csell`** — 商店自动化买卖，操作容器界面商店
 - **`/clitematica`** — Litematica 选区工具：沿轴移动投影，或使选区实时跟随玩家移动
-- **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击和实体命中检测
+- **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击、实体命中检测和自动瞄准
 - **`/criptide`** — 覆盖激流三叉戟的水/雨限制，在沙漠、洞穴、屋檐下等任意位置均可飞行
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
 
@@ -174,12 +174,17 @@ All features run entirely on the client side. No server-side installation is req
 - **`/clitematica help [subcommand]`** — detailed help for `shift` and `follow`
 - Requires Litematica to be installed
 
-### `/cbow` — Arrow Trajectory Prediction
+### `/cbow` — Arrow Trajectory Prediction & Auto-Aim
 
 - Real-time parabolic trajectory display while charging a bow or holding a loaded crossbow
 - Clean dotted trajectory line with configurable color
 - **Multishot support** — shows 3 trajectories fanned at ±10° for both crossbows and custom server bows
 - **Entity-hit detection** — trajectory and marker turn green when an arrow would hit a living entity
+- **Auto-aim targeting (`/cbow target`)** — lock bow aim onto a specific entity or enable auto-acquire mode
+  - `auto` mode: raycasts from the player's eyes along the look direction, locks onto the first entity hit
+  - Manual mode: target a specific player by name or an entity via selector (`@e[distance=..50,limit=1]`)
+  - Mod controls the player's yaw/pitch in real-time, adjusting for gravity and drag to ensure the arrow passes through the target
+  - Lock persists until the bow is released; target config is kept across draw/release cycles
 - **Face-aligned landing markers** — markers orient perpendicular to the hit surface (horizontal on ground, vertical on walls)
 - 3D landing marker with crosshair, ring, and beacon line for high visibility
 - Distance label at the landing point
@@ -567,15 +572,25 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 --- Help ---
 /cbow                         — Toggle arrow trajectory prediction on/off
 /cbow help                    — Show help information
-/cbow help <subcommand>       — Show detailed help for on/off/status
+/cbow help <subcommand>       — Show detailed help for on/off/status/target
 
 --- Control ---
 /cbow on                      — Enable trajectory prediction
 /cbow off                     — Disable trajectory prediction
 /cbow status                  — Show current state, weapon type, charge %, enchantments
+
+--- Auto-Aim Targeting ---
+/cbow target auto             — Arm auto-targeting: draw bow, aim will lock when crosshair passes an entity
+/cbow target <player>         — Set a specific player as target (by name)
+/cbow target @e[distance=..50,limit=1]  — Set target via entity selector
+/cbow target @p               — Target nearest player
+/cbow target                  — Show current target status
+/cbow target stop             — Cancel targeting
 ```
 
 **Usage:** Hold a bow and draw it (or hold a loaded crossbow). A dotted golden parabola shows the predicted arrow path in real-time. The landing point is marked with a prominent crosshair marker. If the arrow would hit an entity, the entire trajectory turns green and a diamond marker appears at the impact point. Multishot bows/crossbows show 3 trajectories. The toggle state persists across game restarts in `config/client-tools/global.json`.
+
+**Auto-aim:** Set a target with `/cbow target auto` (auto-acquire on draw) or `/cbow target <name/selector>`. When you draw the bow, the mod controls your aim — adjusting yaw/pitch in real-time with full gravity and drag compensation. The lock releases when you fire; the target config is kept for your next shot. Use `/cbow target stop` to clear.
 
 ### `/criptide` Quick Start
 

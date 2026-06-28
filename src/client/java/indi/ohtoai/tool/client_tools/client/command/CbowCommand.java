@@ -3,6 +3,7 @@ package indi.ohtoai.tool.client_tools.client.command;
 import com.mojang.brigadier.CommandDispatcher;
 import com.mojang.brigadier.arguments.StringArgumentType;
 import com.mojang.brigadier.suggestion.SuggestionProvider;
+import indi.ohtoai.tool.client_tools.client.bow.BowTargetManager;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryState;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
 import net.minecraft.client.Minecraft;
@@ -32,7 +33,18 @@ public class CbowCommand {
     private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
         (ctx, builder) -> {
             String remaining = builder.getRemaining().toLowerCase();
-            for (String s : new String[]{"on", "off", "status"}) {
+            for (String s : new String[]{"on", "off", "status", "target"}) {
+                if (s.toLowerCase().startsWith(remaining)) {
+                    builder.suggest(s);
+                }
+            }
+            return builder.buildFuture();
+        };
+
+    private static final SuggestionProvider<FabricClientCommandSource> TARGET_SELECTOR_SUGGESTIONS =
+        (ctx, builder) -> {
+            String remaining = builder.getRemaining().toLowerCase();
+            for (String s : new String[]{"@p", "@a", "@r", "@e[distance=..50,limit=1]", "auto"}) {
                 if (s.toLowerCase().startsWith(remaining)) {
                     builder.suggest(s);
                 }
@@ -56,6 +68,16 @@ public class CbowCommand {
                         .suggests(HELP_SUBCOMMAND_SUGGESTIONS)
                         .executes(ctx -> showHelpFor(ctx.getSource(),
                             StringArgumentType.getString(ctx, "subcommand")))))
+                .then(literal("target")
+                    .then(literal("auto")
+                        .executes(ctx -> targetAuto(ctx.getSource())))
+                    .then(literal("stop")
+                        .executes(ctx -> targetStop(ctx.getSource())))
+                    .then(argument("selector", StringArgumentType.greedyString())
+                        .suggests(TARGET_SELECTOR_SUGGESTIONS)
+                        .executes(ctx -> targetManual(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "selector"))))
+                    .executes(ctx -> targetStatus(ctx.getSource())))
         );
     }
 
@@ -193,6 +215,7 @@ public class CbowCommand {
         source.sendFeedback(Component.translatable("client-tools.cbow.help.on"));
         source.sendFeedback(Component.translatable("client-tools.cbow.help.off"));
         source.sendFeedback(Component.translatable("client-tools.cbow.help.status"));
+        source.sendFeedback(Component.translatable("client-tools.cbow.help.target"));
         return 1;
     }
 
@@ -204,9 +227,57 @@ public class CbowCommand {
                 Component.translatable("client-tools.cbow.help.off_detail"));
             case "status" -> source.sendFeedback(
                 Component.translatable("client-tools.cbow.help.status_detail"));
+            case "target" -> source.sendFeedback(
+                Component.translatable("client-tools.cbow.help.target_detail"));
             default -> source.sendFeedback(
                 Component.translatable("client-tools.cbow.help.unknown_subcommand", subcommand));
         }
+        return 1;
+    }
+
+    // ── Target subcommand executors ──────────────────────────────
+
+    private static int targetAuto(FabricClientCommandSource source) {
+        Minecraft client = Minecraft.getInstance();
+        String error = BowTargetManager.getInstance().startAuto(client);
+        if (error != null) {
+            source.sendFeedback(Component.translatable("client-tools.cbow.target." + error));
+            return 0;
+        }
+        source.sendFeedback(Component.translatable("client-tools.cbow.target.armed_auto"));
+        return 1;
+    }
+
+    private static int targetManual(FabricClientCommandSource source, String selector) {
+        Minecraft client = Minecraft.getInstance();
+        String error = BowTargetManager.getInstance().startManual(client, selector);
+        if (error != null) {
+            source.sendFeedback(Component.translatable("client-tools.cbow.target." + error));
+            return 0;
+        }
+        source.sendFeedback(Component.translatable("client-tools.cbow.target.set",
+            BowTargetManager.getInstance().getTargetName()));
+        return 1;
+    }
+
+    private static int targetStop(FabricClientCommandSource source) {
+        if (!BowTargetManager.getInstance().isActive()) {
+            source.sendFeedback(Component.translatable("client-tools.cbow.target.not_targeting"));
+            return 0;
+        }
+        BowTargetManager.getInstance().stop();
+        source.sendFeedback(Component.translatable("client-tools.cbow.target.cancelled"));
+        return 1;
+    }
+
+    private static int targetStatus(FabricClientCommandSource source) {
+        if (!BowTargetManager.getInstance().isActive()) {
+            source.sendFeedback(Component.translatable("client-tools.cbow.target.not_targeting"));
+            return 0;
+        }
+        String mode = BowTargetManager.getInstance().isAutoMode() ? "auto" : "manual";
+        source.sendFeedback(Component.translatable("client-tools.cbow.target.status",
+            BowTargetManager.getInstance().getTargetName(), mode));
         return 1;
     }
 

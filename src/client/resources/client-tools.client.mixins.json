@@ -5,7 +5,9 @@
 	"client": [
 		"SuppressScreenMixin",
 		"SuppressInteractionMixin",
-		"RiptideMixin"
+		"RiptideMixin",
+		"BowTargetMixin",
+		"BowTargetViewMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
