@@ -24,13 +24,18 @@ import java.util.function.Predicate;
  * <h3>State machine</h3>
  * <pre>
  *   IDLE  →  ARMED      (/cbow target auto | selector | name)
- *   ARMED →  AIMING     (player starts drawing bow; for auto: raycast hits entity)
- *   AIMING → ARMED      (player releases bow — target config kept for next use)
- *   AIMING → IDLE       (target dies / item switched / /cbow target stop)
+ *   ARMED →  AIMING     (player starts drawing bow; for auto: raycast hits entity
+ *                         for manual: selector re-resolved if needed)
+ *   AIMING → ARMED      (player releases bow / target lost / target died —
+ *                         auto mode silently searches for next target,
+ *                         manual mode silently re-resolves selector on next draw)
+ *   AIMING → IDLE       (/cbow target stop)
  *   ARMED →  IDLE       (/cbow target stop)
  * </pre>
  *
- * <p>The target configuration persists across bow draw/release cycles.
+ * <p>The target configuration persists across bow draw/release cycles and
+ * across target death/despawn — the system never auto-stops, so auto mode
+ * keeps hunting and manual player targeting naturally picks up respawns.
  * In {@code auto} mode the raycast runs each time the bow is drawn; the
  * player keeps normal mouse control if no entity is in their sights.
  */
@@ -59,8 +64,8 @@ public class BowTargetManager {
     private boolean autoMode = false;
     /** Entity selector / player name stored for manual mode (used for status display). */
     private String manualSelector = "";
-    /** When true, compensate for target velocity (lead the target). */
-    private boolean velocityPredict = false;
+    /** When true, render a bounding-box highlight around the target entity. */
+    private boolean highlight = true;
 
     /** Last-computed desired yaw (degrees), read by the view-rotation mixin. */
     private float desiredYaw;
@@ -100,12 +105,12 @@ public class BowTargetManager {
     public float getDesiredYaw() { return desiredYaw; }
     /** Last-computed pitch for the view-rotation mixin to read. */
     public float getDesiredPitch() { return desiredPitch; }
-    /** Whether velocity prediction (leading) is enabled. */
-    public boolean isVelocityPredictEnabled() { return velocityPredict; }
-    /** Toggle velocity prediction on/off, returning the new state. */
-    public boolean toggleVelocityPredict() {
-        velocityPredict = !velocityPredict;
-        return velocityPredict;
+    /** Whether target highlight is enabled. */
+    public boolean isHighlightEnabled() { return highlight; }
+    /** Toggle highlight on/off, returning the new state. */
+    public boolean toggleHighlight() {
+        highlight = !highlight;
+        return highlight;
     }
 
     // ── Command entry points ─────────────────────────────────────
@@ -199,15 +204,35 @@ public class BowTargetManager {
             }
             targetEntity = hit;
             targetDisplayName = hit.getName().getString();
+        } else {
+            // Manual mode: re-resolve if target was lost (player died / left range).
+            // This lets player-name and @p selectors automatically re-acquire after
+            // the target respawns or re-enters render distance.
+            if (targetEntity == null || targetEntity.isRemoved() || !targetEntity.isAlive()) {
+                try {
+                    targetEntity = resolveSelector(client, manualSelector);
+                } catch (IllegalArgumentException e) {
+                    stopWithMessage(client, "invalid_selector");
+                    return;
+                }
+                if (targetEntity == null || targetEntity == client.player) {
+                    // Can't find a valid target yet — stay ARMED, retry on next draw
+                    targetEntity = null;
+                    return;
+                }
+                targetDisplayName = targetEntity.getName().getString();
+            }
         }
 
-        // Validate the target is still alive
+        // Validate the target is still alive and in the same dimension
         if (targetEntity == null || targetEntity.isRemoved() || !targetEntity.isAlive()) {
-            stopWithMessage(client, "target_died");
+            // Stay ARMED — will retry on next draw tick
+            targetEntity = null;
             return;
         }
         if (targetEntity.level() != client.level) {
-            stop();
+            // Different dimension — stay ARMED, clear target so we re-resolve later
+            targetEntity = null;
             return;
         }
 
@@ -239,13 +264,15 @@ public class BowTargetManager {
             return;
         }
 
-        // Target died or left
-        if (targetEntity == null || targetEntity.isRemoved() || !targetEntity.isAlive()) {
-            stopWithMessage(client, "target_died");
-            return;
-        }
-        if (targetEntity.level() != client.level) {
-            stop();
+        // Target died or left — go back to ARMED instead of stopping.
+        // For auto mode the next raycast will find a new target while
+        // the bow is still drawn.  For manual mode the selector will be
+        // re-resolved on the next draw tick, handling player respawns
+        // and re-entries into render distance automatically.
+        if (targetEntity == null || targetEntity.isRemoved() || !targetEntity.isAlive()
+                || targetEntity.level() != client.level) {
+            targetEntity = null;
+            state = State.ARMED;
             return;
         }
 
@@ -258,24 +285,6 @@ public class BowTargetManager {
         Vec3 spawnPos = getArrowSpawnPos(client.player);
         Vec3 targetPos = getTargetAimPoint(targetEntity);
         double arrowSpeed = getArrowSpeed(client.player, bowItem);
-
-        // ── Velocity prediction (lead the target) ──────────────
-        if (velocityPredict) {
-            Vec3 targetVel = targetEntity.getDeltaMovement();
-            if (targetVel.lengthSqr() > 0.0001) {
-                // Estimate flight time from direct distance and speed,
-                // with a drag fudge factor.  The iterative refinement
-                // in calculateAim will correct any inaccuracy.
-                double dist = spawnPos.distanceTo(targetPos);
-                double estFlightTime = arrowSpeed > 0.01
-                    ? dist / (arrowSpeed * 0.93)  // 0.93 ≈ average drag
-                    : 0.0;
-                targetPos = targetPos.add(
-                    targetVel.x * estFlightTime,
-                    targetVel.y * estFlightTime,
-                    targetVel.z * estFlightTime);
-            }
-        }
 
         double[] aim = calculateAim(spawnPos, targetPos, arrowSpeed);
         float yaw = (float) aim[0];

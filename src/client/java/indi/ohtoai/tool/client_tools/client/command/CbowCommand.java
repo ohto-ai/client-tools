@@ -73,8 +73,8 @@ public class CbowCommand {
                         .executes(ctx -> targetAuto(ctx.getSource())))
                     .then(literal("stop")
                         .executes(ctx -> targetStop(ctx.getSource())))
-                    .then(literal("predict")
-                        .executes(ctx -> targetPredict(ctx.getSource())))
+                    .then(literal("highlight")
+                        .executes(ctx -> targetHighlight(ctx.getSource())))
                     .then(argument("selector", StringArgumentType.greedyString())
                         .suggests(TARGET_SELECTOR_SUGGESTIONS)
                         .executes(ctx -> targetManual(ctx.getSource(),
@@ -279,19 +279,19 @@ public class CbowCommand {
             return 0;
         }
         String mode = BowTargetManager.getInstance().isAutoMode() ? "auto" : "manual";
-        String predict = BowTargetManager.getInstance().isVelocityPredictEnabled()
-            ? " §a+lead" : "";
+        String hl = BowTargetManager.getInstance().isHighlightEnabled()
+            ? " §a+hl" : "";
         String label = name.isEmpty() ? "auto" : name;
         source.sendFeedback(Component.translatable("client-tools.cbow.target.status",
-            label, mode + predict));
+            label, mode + hl));
         return 1;
     }
 
-    private static int targetPredict(FabricClientCommandSource source) {
-        boolean now = BowTargetManager.getInstance().toggleVelocityPredict();
+    private static int targetHighlight(FabricClientCommandSource source) {
+        boolean now = BowTargetManager.getInstance().toggleHighlight();
         source.sendFeedback(Component.translatable(now
-            ? "client-tools.cbow.target.predict_on"
-            : "client-tools.cbow.target.predict_off"));
+            ? "client-tools.cbow.target.highlight_on"
+            : "client-tools.cbow.target.highlight_off"));
         return 1;
     }
 

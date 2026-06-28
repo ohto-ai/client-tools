@@ -18,6 +18,7 @@ import indi.ohtoai.tool.client_tools.client.command.CsellCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsequenceCommand;
 import indi.ohtoai.tool.client_tools.client.command.CsweepCommand;
 import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
+import indi.ohtoai.tool.client_tools.client.bow.BowTargetHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.bow.BowTargetManager;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
 import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
@@ -89,6 +90,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CcraftHighlightRenderer.render(context);
 			SweepHighlightRenderer.render(context);
 				BowTrajectoryRenderer.render(context);
+				BowTargetHighlightRenderer.render(context);
 		});
 
 		// Auto-show highlight on world join when positions are already configured
