@@ -39,6 +39,9 @@ public class P2pChatManager {
     // ── State ─────────────────────────────────────────────────
 
     private SecretKey encryptionKey;
+    private final Map<String, SecretKey> playerKeys = new ConcurrentHashMap<>();
+    private final Map<String, String> playerPasswords = new ConcurrentHashMap<>();
+    private String alias = "em";
     private final List<String> groupMembers = new CopyOnWriteArrayList<>();
     private final List<P2pMessage> messageHistory = new ArrayList<>();
     private static final int MAX_HISTORY = 100;
@@ -71,6 +74,21 @@ public class P2pChatManager {
         if (!saved.isEmpty()) {
             this.encryptionKey = P2pEncryption.deriveKey(saved);
         }
+        // Restore persisted player-specific keys
+        Map<String, String> savedPlayerPwds = ClientToolsConfig.getP2pPlayerPasswords();
+        if (savedPlayerPwds != null) {
+            for (var entry : savedPlayerPwds.entrySet()) {
+                if (!entry.getValue().isEmpty()) {
+                    playerPasswords.put(entry.getKey(), entry.getValue());
+                    playerKeys.put(entry.getKey(), P2pEncryption.deriveKey(entry.getValue()));
+                }
+            }
+        }
+        // Restore alias
+        String savedAlias = ClientToolsConfig.getP2pAlias();
+        if (savedAlias != null && !savedAlias.isEmpty()) {
+            this.alias = savedAlias;
+        }
     }
 
     // ── Key management ────────────────────────────────────────
@@ -81,13 +99,60 @@ public class P2pChatManager {
     }
 
     public boolean isKeySet() {
-        return encryptionKey != null;
+        return encryptionKey != null || !playerKeys.isEmpty();
     }
 
     public void clearKey() {
         encryptionKey = null;
         pendingMessages.clear();
         ClientToolsConfig.setP2pPassword("");
+    }
+
+    // ── Player-specific key management ────────────────────────
+
+    /**
+     * Set or clear a player-specific encryption password.
+     * If {@code password} is blank, the player-specific key is removed
+     * and that player will fall back to the global key.
+     */
+    public void setPlayerPassword(String player, String password) {
+        if (password == null || password.isBlank()) {
+            playerKeys.remove(player);
+            playerPasswords.remove(player);
+        } else {
+            playerKeys.put(player, P2pEncryption.deriveKey(password));
+            playerPasswords.put(player, password);
+        }
+        // Persist
+        ClientToolsConfig.setP2pPlayerPasswords(new HashMap<>(playerPasswords));
+    }
+
+    /** Get the raw password for a specific player (may be null). */
+    public String getPlayerPassword(String player) {
+        return playerPasswords.get(player);
+    }
+
+    /** Get a copy of all player-specific passwords (player → password). */
+    public Map<String, String> getPlayerPasswords() {
+        return new HashMap<>(playerPasswords);
+    }
+
+    /** Resolve the key to use for a given player. Player-specific first, then global. */
+    public SecretKey getKeyForPlayer(String player) {
+        SecretKey pk = playerKeys.get(player);
+        if (pk != null) return pk;
+        return encryptionKey;
+    }
+
+    // ── Alias management ──────────────────────────────────────
+
+    public String getAlias() {
+        return alias;
+    }
+
+    public void setAlias(String alias) {
+        this.alias = alias != null ? alias : "em";
+        ClientToolsConfig.setP2pAlias(this.alias.isEmpty() ? "" : this.alias);
     }
 
     // ── Sending ───────────────────────────────────────────────
@@ -107,14 +172,16 @@ public class P2pChatManager {
     public void sendToPlayer(String targetPlayer, String plaintext) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.player.connection == null) return;
-        if (encryptionKey == null) {
+
+        SecretKey key = getKeyForPlayer(targetPlayer);
+        if (key == null) {
             sendLocalMessage("client-tools.cencrypt.key_not_set");
             return;
         }
 
         String msgId = newMsgId();
         String framed = "M" + msgId + plaintext;
-        byte[] encrypted = P2pEncryption.encrypt(framed, encryptionKey);
+        byte[] encrypted = P2pEncryption.encrypt(framed, key);
         String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(encrypted);
 
         String payload = MARKER + encoded;
@@ -172,9 +239,11 @@ public class P2pChatManager {
     private void sendRaw(String targetPlayer, String payload) {
         Minecraft client = Minecraft.getInstance();
         if (client.player == null || client.player.connection == null) return;
-        if (encryptionKey == null) return;
 
-        byte[] encrypted = P2pEncryption.encrypt(payload, encryptionKey);
+        SecretKey key = getKeyForPlayer(targetPlayer);
+        if (key == null) return;
+
+        byte[] encrypted = P2pEncryption.encrypt(payload, key);
         String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(encrypted);
         String command = "msg " + targetPlayer + " " + MARKER + encoded;
         if (command.length() > 256) return;
@@ -192,7 +261,7 @@ public class P2pChatManager {
      * @param sender  player name from packet metadata, or {@code null}
      */
     public Component processIncomingMessage(Component message, String sender) {
-        if (encryptionKey == null) return message;
+        if (encryptionKey == null && playerKeys.isEmpty()) return message;
 
         String text = message.getString();
         int markerIdx = text.indexOf(MARKER);
@@ -229,7 +298,17 @@ public class P2pChatManager {
 
         try {
             byte[] encrypted = Base64.getUrlDecoder().decode(encoded);
-            String decrypted = P2pEncryption.decrypt(encrypted, encryptionKey);
+
+            // Try player-specific key first, then global key
+            String decrypted = null;
+            SecretKey playerKey = playerKeys.get(sender);
+            if (playerKey != null) {
+                decrypted = P2pEncryption.decrypt(encrypted, playerKey);
+            }
+            if (decrypted == null && encryptionKey != null) {
+                decrypted = P2pEncryption.decrypt(encrypted, encryptionKey);
+            }
+
             if (decrypted == null || decrypted.length() < 1 + MSG_ID_HEX_LEN) {
                 sendLocalMessage("client-tools.cencrypt.decrypt_failed", sender);
                 return message;

@@ -8,7 +8,9 @@ import java.io.IOException;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.HashMap;
 import java.util.List;
+import java.util.Map;
 
 /**
  * Global (non-world-specific) Client Tools settings.
@@ -29,6 +31,8 @@ public final class ClientToolsConfig {
     private static List<String> p2pGroupMembers = new ArrayList<>();
     private static int p2pUdpPort = 0;
     private static String p2pPassword = "";
+    private static Map<String, String> p2pPlayerPasswords = new HashMap<>();
+    private static String p2pAlias = "em";
     private static boolean loaded = false;
 
     private ClientToolsConfig() {}
@@ -43,6 +47,8 @@ public final class ClientToolsConfig {
         List<String> p2pGroupMembers;
         int p2pUdpPort;
         String p2pPassword;
+        Map<String, String> p2pPlayerPasswords;
+        String p2pAlias;
     }
 
     private static void ensureLoaded() {
@@ -60,6 +66,8 @@ public final class ClientToolsConfig {
                 p2pListenEnabled = data.p2pListenEnabled;
                 p2pUdpPort = data.p2pUdpPort;
                 if (data.p2pPassword != null) p2pPassword = data.p2pPassword;
+                if (data.p2pPlayerPasswords != null) p2pPlayerPasswords = data.p2pPlayerPasswords;
+                if (data.p2pAlias != null) p2pAlias = data.p2pAlias;
             }
         } catch (IOException ignored) {}
     }
@@ -152,6 +160,28 @@ public final class ClientToolsConfig {
         save();
     }
 
+    public static Map<String, String> getP2pPlayerPasswords() {
+        ensureLoaded();
+        return p2pPlayerPasswords;
+    }
+
+    public static void setP2pPlayerPasswords(Map<String, String> v) {
+        ensureLoaded();
+        p2pPlayerPasswords = v != null ? v : new HashMap<>();
+        save();
+    }
+
+    public static String getP2pAlias() {
+        ensureLoaded();
+        return p2pAlias;
+    }
+
+    public static void setP2pAlias(String v) {
+        ensureLoaded();
+        p2pAlias = v != null ? v : "em";
+        save();
+    }
+
     private static void save() {
         Data data = new Data();
         data.autoJump = autoJump;
@@ -162,6 +192,8 @@ public final class ClientToolsConfig {
         data.p2pGroupMembers = p2pGroupMembers;
         data.p2pUdpPort = p2pUdpPort;
         data.p2pPassword = p2pPassword.isEmpty() ? null : p2pPassword;
+        data.p2pPlayerPasswords = p2pPlayerPasswords.isEmpty() ? null : p2pPlayerPasswords;
+        data.p2pAlias = p2pAlias.isEmpty() ? null : p2pAlias;
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
             Files.writeString(CONFIG_PATH, GSON.toJson(data));

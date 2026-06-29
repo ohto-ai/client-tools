@@ -48,7 +48,7 @@ Support Minecraft 1.21～1.21.8
 - **`/cbow`** — Real-time arrow trajectory prediction with parabola, landing markers, Multishot support, entity-hit detection, and auto-aim targeting
 - **`/criptide`** — Override the water/rain requirement for Riptide tridents, enabling flight in deserts, caves, and under roofs
 - **`/cdoll`** — Dynamically apply the Furina doll 3D model to any item, with built-in resource pack auto-enable
-- **`/cencrypt`** — AES-256-GCM encrypted private chat via `/msg`, with delivery confirmation, group messaging, and key persistence
+- **`/cencrypt`** — AES-256-GCM encrypted private chat via `/msg`, with delivery confirmation, group messaging, per-player keys, command alias, and key persistence
 
 All features run entirely on the client side. No server-side installation is required.
 
@@ -69,7 +69,7 @@ All features run entirely on the client side. No server-side installation is req
 - **`/cbow`** — 实时箭矢轨迹预测，显示抛物线、落点标记，支持多重射击、实体命中检测和自动瞄准
 - **`/criptide`** — 覆盖激流三叉戟的水/雨限制，在沙漠、洞穴、屋檐下等任意位置均可飞行
 - **`/cdoll`** — 动态将 Furina 娃娃 3D 模型应用到任意物品，内置资源包自动启用
-- **`/cencrypt`** — AES-256-GCM 加密私聊，通过 `/msg` 发送加密消息，支持送达确认、群发和密钥持久化
+- **`/cencrypt`** — AES-256-GCM 加密私聊，通过 `/msg` 发送加密消息，支持送达确认、群发、玩家专属密钥、命令别名和密钥持久化
 
 所有功能均完全在客户端运行，无需服务端安装。
 
@@ -271,7 +271,9 @@ Categories: **Flight**, **Craft**, **Sweep**, **Display**, **Timer**, **Status**
   "autoJump": false,
   "cbowEnabled": false,
   "criptideEnabled": false,
-  "p2pPassword": ""
+  "p2pPassword": "",
+  "p2pPlayerPasswords": {},
+  "p2pAlias": "em"
 }
 ```
 
@@ -280,6 +282,8 @@ Categories: **Flight**, **Craft**, **Sweep**, **Display**, **Timer**, **Status**
 | `autoJump` | `/cfly jump` | 飞行时自动起跳 |
 | `cbowEnabled` | `/cbow` | 箭矢轨迹预测开关状态 |
 | `criptideEnabled` | `/criptide` | 激流三叉戟覆盖开关状态 |
+| `p2pPlayerPasswords` | `/cencrypt set` | 玩家专属密钥映射（玩家名 → 密码） |
+| `p2pAlias` | `/cencrypt alias` | `/cencrypt msg` 的快捷别名（默认 `em`） |
 
 每次通过命令修改这些设置时，`global.json` 会自动更新。重启游戏后设置保持不变。
 
@@ -639,7 +643,9 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 
 --- Key setup ---
 /cencrypt key <password>                      — Set the shared encryption password (persisted)
-/cencrypt stop                                — Clear the key
+/cencrypt set <player> <password>             — Set a player-specific encryption key
+/cencrypt set <player>                        — Clear player-specific key (revert to global)
+/cencrypt stop                                — Clear the global key
 /cencrypt status                              — Show key status and group info
 
 --- Messaging ---
@@ -649,13 +655,21 @@ Use **Tab** to auto-complete durations and colors in the `show` command.
 /cencrypt group list                          — Show group members
 /cencrypt group send <message>               — Encrypted message to all online group members
 /cencrypt group clear                         — Remove all group members
+
+--- Alias ---
+/cencrypt alias em                            — Set /em as shortcut for /cencrypt msg (default)
+/cencrypt alias                               — Disable the alias shortcut
 ```
 
 **Protocol:** Messages are AES-256-GCM encrypted and sent through vanilla `/msg`. The mod intercepts incoming whispers, detects the `[CTP2P]` marker, decrypts, and displays plaintext. Ciphertext never appears in chat.
 
+**Player-specific keys:** Use `/cencrypt set <player> <password>` to set a key for a specific player. Messages to/from that player will use their key instead of the global key. If no player-specific key is set, the global key is used as fallback. This allows different keys for different friends on the same server.
+
 **Delivery confirmation:** Each message carries a unique ID. The recipient auto-replies with an ACK. The sender sees `✓ Delivered` on success or `✗ Could not deliver` after a 30-second timeout (offline / wrong key / truncated).
 
-**Key persistence:** The password is saved to `config/client-tools/global.json` and auto-restored on restart. Use `/cencrypt stop` to clear it.
+**Command alias:** Use `/cencrypt alias em` to set `/em` as a shortcut for `/cencrypt msg`. Then `/em Bob hello` works like `/cencrypt msg Bob hello`. Disable with `/cencrypt alias`. Default alias is `em`.
+
+**Key persistence:** Keys are saved to `config/client-tools/global.json` and auto-restored on restart. Use `/cencrypt stop` to clear the global key.
 
 **Undecryptable messages:** If an incoming `[CTP2P]` message can't be decrypted (wrong key, corruption), a visible warning is shown.
 

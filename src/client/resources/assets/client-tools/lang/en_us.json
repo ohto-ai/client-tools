@@ -705,6 +705,15 @@
   "client-tools.cencrypt.help.listen_detail": "§6Subcommand: listen\n§7Toggles automatic interception of incoming /msg messages containing [CTENCRYPT] markers.\n§7When disabled, encrypted messages will show as raw ciphertext.",
   "client-tools.cencrypt.help.status_detail": "§6Subcommand: status\n§7Displays:\n  §7- Encryption key status (SET / NOT SET)\n  §7- Interception state (ON / OFF)\n  §7- Number of group members",
   "client-tools.cencrypt.help.stop_detail": "§6Subcommand: stop\n§7Clears the encryption key from memory. Incoming encrypted messages will no longer be decrypted.",
+  "client-tools.cencrypt.help.set": "§e/cencrypt set <player> [password]  §7Set or clear a player-specific encryption key. If cleared, the global key is used.",
+  "client-tools.cencrypt.help.alias": "§e/cencrypt alias [name]  §7Set or clear a shortcut alias for §e/cencrypt msg§7. Default: §eem§7.",
+  "client-tools.cencrypt.help.set_detail": "§6Subcommand: set\n§7Sets a per-player encryption password. When a player-specific key is set,\n§7messages to/from that player use their key instead of the global key.\n§7§f/cencrypt set <player> <password> §7— set a player-specific key\n§7§f/cencrypt set <player> §7— clear the player-specific key (reverts to global)\n§7Example: §f/cencrypt set Bob hunter2",
+  "client-tools.cencrypt.help.alias_detail": "§6Subcommand: alias\n§7Sets a shortcut command alias for §e/cencrypt msg§7.\n§7§f/cencrypt alias <name> §7— set the alias (e.g. §fem§f)\n§7§f/cencrypt alias §7— disable the alias\n§7Default: §fem§7. After setting, use §e/<name> <player> <message> §7to send.",
   "client-tools.cencrypt.help.example": "§7Quick start:\n  §f/cencrypt key mySecret123\n  §f/cencrypt msg Alice Hey! Let's meet at spawn.\n  §7(Alice's mod auto-decrypts and displays the message)\n  §f/cencrypt group add Alice",
-  "client-tools.cencrypt.help.unknown_subcommand": "§cUnknown subcommand: %s. Use §e/cencrypt help §cto see all subcommands."
+  "client-tools.cencrypt.help.unknown_subcommand": "§cUnknown subcommand: %s. Use §e/cencrypt help §cto see all subcommands.",
+  "client-tools.cencrypt.player_key_set": "§aEncryption key set for §e%s§a.",
+  "client-tools.cencrypt.player_key_cleared": "§ePlayer-specific key cleared for §e%s§e. Using global key.",
+  "client-tools.cencrypt.alias_set": "§aAlias set. Use §e/%s <player> <message> §ato send encrypted messages.",
+  "client-tools.cencrypt.alias_cleared": "§eAlias disabled.",
+  "client-tools.cencrypt.alias_empty": "§cAlias cannot be empty."
 }

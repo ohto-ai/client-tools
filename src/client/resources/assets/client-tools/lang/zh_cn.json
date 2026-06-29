@@ -704,6 +704,15 @@
   "client-tools.cencrypt.help.listen_detail": "§6子命令: listen\n§7开启或关闭自动拦截带 [CTENCRYPT] 标记的 /msg 消息。\n§7关闭后，加密消息将以原始密文显示。",
   "client-tools.cencrypt.help.status_detail": "§6子命令: status\n§7显示:\n  §7- 密钥状态（已设置 / 未设置）\n  §7- 拦截状态（开启 / 关闭）\n  §7- 群组成员数量",
   "client-tools.cencrypt.help.stop_detail": "§6子命令: stop\n§7从内存中清除密钥。后续收到的 加密消息将不再解密。",
+  "client-tools.cencrypt.help.set": "§e/cencrypt set <玩家> [密码]  §7设置或清除特定玩家的加密密钥。清除后使用全局密钥。",
+  "client-tools.cencrypt.help.alias": "§e/cencrypt alias [名称]  §7设置或清除 §e/cencrypt msg §7的快捷方式。默认: §eem§7。",
+  "client-tools.cencrypt.help.set_detail": "§6子命令: set\n§7为特定玩家设置加密密码。当设置了玩家专属密钥后，\n§7与该玩家的消息将使用其专属密钥而非全局密钥。\n§7§f/cencrypt set <玩家> <密码> §7— 设置玩家专属密钥\n§7§f/cencrypt set <玩家> §7— 清除玩家专属密钥（恢复使用全局密钥）\n§7示例: §f/cencrypt set Bob hunter2",
+  "client-tools.cencrypt.help.alias_detail": "§6子命令: alias\n§7为 §e/cencrypt msg §7设置快捷命令别名。\n§7§f/cencrypt alias <名称> §7— 设置别名（如 §fem§f）\n§7§f/cencrypt alias §7— 禁用别名\n§7默认: §fem§7。设置后可使用 §e/<名称> <玩家> <消息> §7发送消息。",
   "client-tools.cencrypt.help.example": "§7快速开始:\n  §f/cencrypt key mySecret123\n  §f/cencrypt msg Alice 你好！在出生点见面。\n  §7(Alice 的 mod 自动解密并显示消息)\n  §f/cencrypt group add Alice",
-  "client-tools.cencrypt.help.unknown_subcommand": "§c未知子命令: %s。使用 §e/cencrypt help §c查看所有子命令。"
+  "client-tools.cencrypt.help.unknown_subcommand": "§c未知子命令: %s。使用 §e/cencrypt help §c查看所有子命令。",
+  "client-tools.cencrypt.player_key_set": "§a已为 §e%s §a设置加密密钥。",
+  "client-tools.cencrypt.player_key_cleared": "§e已清除 §e%s §e的专属密钥。将使用全局密钥。",
+  "client-tools.cencrypt.alias_set": "§a别名已设置。使用 §e/%s <玩家> <消息> §a发送加密消息。",
+  "client-tools.cencrypt.alias_cleared": "§e别名已禁用。",
+  "client-tools.cencrypt.alias_empty": "§c别名不能为空。"
 }
