@@ -30,7 +30,7 @@ public class CencryptCommand {
     private static final SuggestionProvider<FabricClientCommandSource> HELP_SUBCOMMAND_SUGGESTIONS =
         (ctx, builder) -> {
             String remaining = builder.getRemaining().toLowerCase();
-            for (String s : new String[]{"key", "msg", "group", "status", "stop", "set", "alias"}) {
+            for (String s : new String[]{"msg", "group", "status", "stop", "set", "clear", "alias"}) {
                 if (s.toLowerCase().startsWith(remaining)) {
                     builder.suggest(s);
                 }
@@ -102,11 +102,6 @@ public class CencryptCommand {
         storedDispatcher = dispatcher;
         dispatcher.register(
             literal("cencrypt")
-                // ── key ──────────────────────────────────────
-                .then(literal("key")
-                    .then(argument("password", StringArgumentType.greedyString())
-                        .executes(ctx -> setKey(ctx.getSource(),
-                            StringArgumentType.getString(ctx, "password")))))
                 // ── msg ──────────────────────────────────────
                 .then(literal("msg")
                     .then(argument("player", StringArgumentType.word())
@@ -145,12 +140,16 @@ public class CencryptCommand {
                 .then(literal("set")
                     .then(argument("player", StringArgumentType.word())
                         .suggests(PLAYER_SUGGESTIONS)
-                        .executes(ctx -> clearPlayerKey(ctx.getSource(),
-                            StringArgumentType.getString(ctx, "player")))
                         .then(argument("password", StringArgumentType.greedyString())
                             .executes(ctx -> setPlayerKey(ctx.getSource(),
                                 StringArgumentType.getString(ctx, "player"),
                                 StringArgumentType.getString(ctx, "password"))))))
+                // ── clear (player-specific key) ──────────────
+                .then(literal("clear")
+                    .then(argument("player", StringArgumentType.word())
+                        .suggests(PLAYER_SUGGESTIONS)
+                        .executes(ctx -> clearPlayerKey(ctx.getSource(),
+                            StringArgumentType.getString(ctx, "player")))))
                 // ── alias ────────────────────────────────────
                 .then(literal("alias")
                     .executes(ctx -> clearAlias(ctx.getSource()))
@@ -174,26 +173,10 @@ public class CencryptCommand {
         }
     }
 
-    // ── key ────────────────────────────────────────────────────
-
-    private static int setKey(FabricClientCommandSource source, String password) {
-        if (password.isBlank()) {
-            source.sendFeedback(Component.translatable("client-tools.cencrypt.key_empty"));
-            return 0;
-        }
-        P2pChatManager.getInstance().setPassword(password);
-        source.sendFeedback(Component.translatable("client-tools.cencrypt.key_set"));
-        return 1;
-    }
-
     // ── msg ────────────────────────────────────────────────────
 
     private static int sendMsg(FabricClientCommandSource source, String player, String message) {
         P2pChatManager mgr = P2pChatManager.getInstance();
-        if (!mgr.isKeySet()) {
-            source.sendFeedback(Component.translatable("client-tools.cencrypt.key_not_set"));
-            return 0;
-        }
         if (player.equalsIgnoreCase(Minecraft.getInstance().getUser().getName())) {
             source.sendFeedback(Component.translatable("client-tools.cencrypt.self_msg"));
             return 0;
@@ -245,10 +228,6 @@ public class CencryptCommand {
 
     private static int groupSend(FabricClientCommandSource source, String message) {
         P2pChatManager mgr = P2pChatManager.getInstance();
-        if (!mgr.isKeySet()) {
-            source.sendFeedback(Component.translatable("client-tools.cencrypt.key_not_set"));
-            return 0;
-        }
         if (mgr.getGroupMembers().isEmpty()) {
             source.sendFeedback(Component.translatable("client-tools.cencrypt.group_empty"));
             return 0;
@@ -279,10 +258,11 @@ public class CencryptCommand {
     private static int showStatus(FabricClientCommandSource source) {
         P2pChatManager mgr = P2pChatManager.getInstance();
         source.sendFeedback(Component.translatable("client-tools.cencrypt.status_header"));
-        source.sendFeedback(Component.translatable("client-tools.cencrypt.status_key",
-            mgr.isKeySet()
-                ? Component.translatable("client-tools.cencrypt.status_key_set").getString()
-                : Component.translatable("client-tools.cencrypt.status_key_not_set").getString()));
+        int keyCount = mgr.getPlayerPasswords().size();
+        String keyStatus = keyCount > 0
+            ? Component.translatable("client-tools.cencrypt.status_has_keys", keyCount).getString()
+            : Component.translatable("client-tools.cencrypt.status_no_keys").getString();
+        source.sendFeedback(Component.translatable("client-tools.cencrypt.status_key", keyStatus));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.status_group",
             mgr.getGroupMembers().size()));
         return 1;
@@ -301,12 +281,12 @@ public class CencryptCommand {
     private static int showHelp(FabricClientCommandSource source) {
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.header"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.overview"));
-        source.sendFeedback(Component.translatable("client-tools.cencrypt.help.key"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.msg"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.group"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.status"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.stop"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.set"));
+        source.sendFeedback(Component.translatable("client-tools.cencrypt.help.clear"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.alias"));
         source.sendFeedback(Component.translatable("client-tools.cencrypt.help.example"));
         return 1;
@@ -314,8 +294,6 @@ public class CencryptCommand {
 
     private static int showHelpFor(FabricClientCommandSource source, String subcommand) {
         switch (subcommand.toLowerCase()) {
-            case "key" -> source.sendFeedback(
-                Component.translatable("client-tools.cencrypt.help.key_detail"));
             case "msg" -> source.sendFeedback(
                 Component.translatable("client-tools.cencrypt.help.msg_detail"));
             case "group" -> source.sendFeedback(
@@ -326,6 +304,8 @@ public class CencryptCommand {
                 Component.translatable("client-tools.cencrypt.help.stop_detail"));
             case "set" -> source.sendFeedback(
                 Component.translatable("client-tools.cencrypt.help.set_detail"));
+            case "clear" -> source.sendFeedback(
+                Component.translatable("client-tools.cencrypt.help.clear_detail"));
             case "alias" -> source.sendFeedback(
                 Component.translatable("client-tools.cencrypt.help.alias_detail"));
             default -> source.sendFeedback(
@@ -347,7 +327,12 @@ public class CencryptCommand {
     }
 
     private static int clearPlayerKey(FabricClientCommandSource source, String player) {
-        P2pChatManager.getInstance().setPlayerPassword(player, "");
+        P2pChatManager mgr = P2pChatManager.getInstance();
+        if (mgr.getPlayerPassword(player) == null) {
+            source.sendFeedback(Component.translatable("client-tools.cencrypt.player_key_not_set", player));
+            return 0;
+        }
+        mgr.setPlayerPassword(player, "");
         source.sendFeedback(Component.translatable("client-tools.cencrypt.player_key_cleared", player));
         return 1;
     }

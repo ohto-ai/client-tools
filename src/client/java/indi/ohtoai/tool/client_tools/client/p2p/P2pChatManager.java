@@ -38,7 +38,6 @@ public class P2pChatManager {
 
     // ── State ─────────────────────────────────────────────────
 
-    private SecretKey encryptionKey;
     private final Map<String, SecretKey> playerKeys = new ConcurrentHashMap<>();
     private final Map<String, String> playerPasswords = new ConcurrentHashMap<>();
     private String alias = "em";
@@ -69,11 +68,6 @@ public class P2pChatManager {
 
     private P2pChatManager() {
         groupMembers.addAll(ClientToolsConfig.getP2pGroupMembers());
-        // Restore persisted key on startup
-        String saved = ClientToolsConfig.getP2pPassword();
-        if (!saved.isEmpty()) {
-            this.encryptionKey = P2pEncryption.deriveKey(saved);
-        }
         // Restore persisted player-specific keys
         Map<String, String> savedPlayerPwds = ClientToolsConfig.getP2pPlayerPasswords();
         if (savedPlayerPwds != null) {
@@ -93,19 +87,21 @@ public class P2pChatManager {
 
     // ── Key management ────────────────────────────────────────
 
-    public void setPassword(String password) {
-        this.encryptionKey = P2pEncryption.deriveKey(password);
-        ClientToolsConfig.setP2pPassword(password);
-    }
-
     public boolean isKeySet() {
-        return encryptionKey != null || !playerKeys.isEmpty();
+        return !playerKeys.isEmpty();
     }
 
+    /** Whether any explicit player-specific key is configured. */
+    public boolean hasExplicitKey() {
+        return !playerKeys.isEmpty();
+    }
+
+    /** Clear all player-specific keys and pending messages. */
     public void clearKey() {
-        encryptionKey = null;
+        playerKeys.clear();
+        playerPasswords.clear();
         pendingMessages.clear();
-        ClientToolsConfig.setP2pPassword("");
+        ClientToolsConfig.setP2pPlayerPasswords(new HashMap<>());
     }
 
     // ── Player-specific key management ────────────────────────
@@ -113,7 +109,7 @@ public class P2pChatManager {
     /**
      * Set or clear a player-specific encryption password.
      * If {@code password} is blank, the player-specific key is removed
-     * and that player will fall back to the global key.
+     * and that player will fall back to using their player name as the encryption key.
      */
     public void setPlayerPassword(String player, String password) {
         if (password == null || password.isBlank()) {
@@ -137,11 +133,15 @@ public class P2pChatManager {
         return new HashMap<>(playerPasswords);
     }
 
-    /** Resolve the key to use for a given player. Player-specific first, then global. */
+    /** Resolve the key to use for a given player. Player-specific first, then player name as fallback. */
     public SecretKey getKeyForPlayer(String player) {
         SecretKey pk = playerKeys.get(player);
         if (pk != null) return pk;
-        return encryptionKey;
+        // Fallback: derive key from player name
+        if (player != null && !player.isEmpty()) {
+            return P2pEncryption.deriveKey(player);
+        }
+        return null;
     }
 
     // ── Alias management ──────────────────────────────────────
@@ -174,10 +174,6 @@ public class P2pChatManager {
         if (client.player == null || client.player.connection == null) return;
 
         SecretKey key = getKeyForPlayer(targetPlayer);
-        if (key == null) {
-            sendLocalMessage("client-tools.cencrypt.key_not_set");
-            return;
-        }
 
         String msgId = newMsgId();
         String framed = "M" + msgId + plaintext;
@@ -241,7 +237,6 @@ public class P2pChatManager {
         if (client.player == null || client.player.connection == null) return;
 
         SecretKey key = getKeyForPlayer(targetPlayer);
-        if (key == null) return;
 
         byte[] encrypted = P2pEncryption.encrypt(payload, key);
         String encoded = Base64.getUrlEncoder().withoutPadding().encodeToString(encrypted);
@@ -261,8 +256,6 @@ public class P2pChatManager {
      * @param sender  player name from packet metadata, or {@code null}
      */
     public Component processIncomingMessage(Component message, String sender) {
-        if (encryptionKey == null && playerKeys.isEmpty()) return message;
-
         String text = message.getString();
         int markerIdx = text.indexOf(MARKER);
         if (markerIdx < 0) return message;
@@ -299,14 +292,15 @@ public class P2pChatManager {
         try {
             byte[] encrypted = Base64.getUrlDecoder().decode(encoded);
 
-            // Try player-specific key first, then global key
+            // Try keys in priority: player-specific → sender name
             String decrypted = null;
             SecretKey playerKey = playerKeys.get(sender);
             if (playerKey != null) {
                 decrypted = P2pEncryption.decrypt(encrypted, playerKey);
             }
-            if (decrypted == null && encryptionKey != null) {
-                decrypted = P2pEncryption.decrypt(encrypted, encryptionKey);
+            if (decrypted == null && sender != null && !sender.isEmpty() && !sender.equals("???")) {
+                SecretKey nameKey = P2pEncryption.deriveKey(sender);
+                decrypted = P2pEncryption.decrypt(encrypted, nameKey);
             }
 
             if (decrypted == null || decrypted.length() < 1 + MSG_ID_HEX_LEN) {
