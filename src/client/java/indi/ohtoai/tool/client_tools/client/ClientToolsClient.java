@@ -21,6 +21,8 @@ import indi.ohtoai.tool.client_tools.client.command.CtimerCommand;
 import indi.ohtoai.tool.client_tools.client.bow.BowTargetHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.bow.BowTargetManager;
 import indi.ohtoai.tool.client_tools.client.bow.BowTrajectoryRenderer;
+import indi.ohtoai.tool.client_tools.client.attack.AttackExecutor;
+import indi.ohtoai.tool.client_tools.client.command.CattackCommand;
 import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
 import indi.ohtoai.tool.client_tools.client.command.CencryptCommand;
 import indi.ohtoai.tool.client_tools.client.command.CriptideCommand;
@@ -69,6 +71,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CsweepCommand.register(dispatcher);
 			CsequenceCommand.register(dispatcher);
 			CdollCommand.register(dispatcher);
+			CattackCommand.register(dispatcher);
 			CbowCommand.register(dispatcher);
 			CencryptCommand.register(dispatcher);
 			CriptideCommand.register(dispatcher);
@@ -82,6 +85,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			FollowExecutor.getInstance().tick(client);
 			SequenceExecutor.getInstance().tick(client);
 			ShopExecutor.getInstance().tick(client);
+			AttackExecutor.getInstance().tick(client);
 				P2pChatManager.getInstance().tick();
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
