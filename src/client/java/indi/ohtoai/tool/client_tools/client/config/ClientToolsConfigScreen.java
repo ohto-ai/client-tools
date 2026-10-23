@@ -309,6 +309,55 @@ public final class ClientToolsConfigScreen {
             }
         }
 
+        // ---- TP Auto ----
+        ConfigCategory tpAuto = builder.getOrCreateCategory(
+            Component.translatable("category.client-tools.tpauto"));
+
+        tpAuto.addEntry(eb.startTextDescription(
+            Component.translatable("text.client-tools.config.tpauto_description"))
+            .build());
+
+        tpAuto.addEntry(eb.startBooleanToggle(
+            Component.translatable("option.client-tools.tpauto.enabled"),
+            ClientToolsConfig.isTpAutoEnabled())
+            .setDefaultValue(false)
+            .setSaveConsumer(ClientToolsConfig::setTpAutoEnabled)
+            .build());
+
+        tpAuto.addEntry(eb.startDropdownMenu(
+            Component.translatable("option.client-tools.tpauto.mode_tpa"),
+            ClientToolsConfig.getTpAutoMode(),
+            java.util.function.Function.identity())
+            .setDefaultValue("deny_all")
+            .setTooltip(Component.translatable("tooltip.client-tools.tpauto.mode_tpa"))
+            .setSaveConsumer(ClientToolsConfig::setTpAutoMode)
+            .build());
+
+        tpAuto.addEntry(eb.startDropdownMenu(
+            Component.translatable("option.client-tools.tpauto.mode_tpahere"),
+            ClientToolsConfig.getTpahereAutoMode(),
+            java.util.function.Function.identity())
+            .setDefaultValue("deny_all")
+            .setTooltip(Component.translatable("tooltip.client-tools.tpauto.mode_tpahere"))
+            .setSaveConsumer(ClientToolsConfig::setTpahereAutoMode)
+            .build());
+
+        tpAuto.addEntry(eb.startStrList(
+            Component.translatable("option.client-tools.tpauto.whitelist_tpa"),
+            ClientToolsConfig.getTpAutoWhitelist())
+            .setDefaultValue(java.util.List.of())
+            .setTooltip(Component.translatable("tooltip.client-tools.tpauto.whitelist_tpa"))
+            .setSaveConsumer(ClientToolsConfig::setTpAutoWhitelist)
+            .build());
+
+        tpAuto.addEntry(eb.startStrList(
+            Component.translatable("option.client-tools.tpauto.whitelist_tpahere"),
+            ClientToolsConfig.getTpahereWhitelist())
+            .setDefaultValue(java.util.List.of())
+            .setTooltip(Component.translatable("tooltip.client-tools.tpauto.whitelist_tpahere"))
+            .setSaveConsumer(ClientToolsConfig::setTpahereWhitelist)
+            .build());
+
         // ---- Status ----
         ConfigCategory status = builder.getOrCreateCategory(
             Component.translatable("category.client-tools.status"));

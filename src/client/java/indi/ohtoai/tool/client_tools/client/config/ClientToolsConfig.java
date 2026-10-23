@@ -33,6 +33,11 @@ public final class ClientToolsConfig {
     private static String p2pPassword = "";
     private static Map<String, String> p2pPlayerPasswords = new HashMap<>();
     private static String p2pAlias = "em";
+    private static boolean tpAutoEnabled = false;
+    private static String tpAutoMode = "deny_all";
+    private static String tpahereAutoMode = "deny_all";
+    private static List<String> tpAutoWhitelist = new ArrayList<>();
+    private static List<String> tpahereWhitelist = new ArrayList<>();
     private static boolean loaded = false;
 
     private ClientToolsConfig() {}
@@ -49,6 +54,11 @@ public final class ClientToolsConfig {
         String p2pPassword;
         Map<String, String> p2pPlayerPasswords;
         String p2pAlias;
+        boolean tpAutoEnabled;
+        String tpAutoMode;
+        String tpahereAutoMode;
+        List<String> tpAutoWhitelist;
+        List<String> tpahereWhitelist;
     }
 
     private static void ensureLoaded() {
@@ -68,6 +78,11 @@ public final class ClientToolsConfig {
                 if (data.p2pPassword != null) p2pPassword = data.p2pPassword;
                 if (data.p2pPlayerPasswords != null) p2pPlayerPasswords = data.p2pPlayerPasswords;
                 if (data.p2pAlias != null) p2pAlias = data.p2pAlias;
+                tpAutoEnabled = data.tpAutoEnabled;
+                if (data.tpAutoMode != null) tpAutoMode = data.tpAutoMode;
+                if (data.tpahereAutoMode != null) tpahereAutoMode = data.tpahereAutoMode;
+                if (data.tpAutoWhitelist != null) tpAutoWhitelist = data.tpAutoWhitelist;
+                if (data.tpahereWhitelist != null) tpahereWhitelist = data.tpahereWhitelist;
             }
         } catch (IOException ignored) {}
     }
@@ -182,6 +197,63 @@ public final class ClientToolsConfig {
         save();
     }
 
+    // ── TPA Auto ────────────────────────────────────────────────
+
+    public static boolean isTpAutoEnabled() {
+        ensureLoaded();
+        return tpAutoEnabled;
+    }
+
+    public static void setTpAutoEnabled(boolean v) {
+        ensureLoaded();
+        tpAutoEnabled = v;
+        save();
+    }
+
+    public static String getTpAutoMode() {
+        ensureLoaded();
+        return tpAutoMode;
+    }
+
+    public static void setTpAutoMode(String v) {
+        ensureLoaded();
+        tpAutoMode = v != null ? v : "deny_all";
+        save();
+    }
+
+    public static String getTpahereAutoMode() {
+        ensureLoaded();
+        return tpahereAutoMode;
+    }
+
+    public static void setTpahereAutoMode(String v) {
+        ensureLoaded();
+        tpahereAutoMode = v != null ? v : "deny_all";
+        save();
+    }
+
+    public static List<String> getTpAutoWhitelist() {
+        ensureLoaded();
+        return tpAutoWhitelist;
+    }
+
+    public static void setTpAutoWhitelist(List<String> v) {
+        ensureLoaded();
+        tpAutoWhitelist = v != null ? v : new ArrayList<>();
+        save();
+    }
+
+    public static List<String> getTpahereWhitelist() {
+        ensureLoaded();
+        return tpahereWhitelist;
+    }
+
+    public static void setTpahereWhitelist(List<String> v) {
+        ensureLoaded();
+        tpahereWhitelist = v != null ? v : new ArrayList<>();
+        save();
+    }
+
     private static void save() {
         Data data = new Data();
         data.autoJump = autoJump;
@@ -194,6 +266,11 @@ public final class ClientToolsConfig {
         data.p2pPassword = p2pPassword.isEmpty() ? null : p2pPassword;
         data.p2pPlayerPasswords = p2pPlayerPasswords.isEmpty() ? null : p2pPlayerPasswords;
         data.p2pAlias = p2pAlias.isEmpty() ? null : p2pAlias;
+        data.tpAutoEnabled = tpAutoEnabled;
+        data.tpAutoMode = tpAutoMode.isEmpty() ? null : tpAutoMode;
+        data.tpahereAutoMode = tpahereAutoMode.isEmpty() ? null : tpahereAutoMode;
+        data.tpAutoWhitelist = tpAutoWhitelist.isEmpty() ? null : tpAutoWhitelist;
+        data.tpahereWhitelist = tpahereWhitelist.isEmpty() ? null : tpahereWhitelist;
         try {
             Files.createDirectories(CONFIG_PATH.getParent());
             Files.writeString(CONFIG_PATH, GSON.toJson(data));

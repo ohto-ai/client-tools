@@ -27,6 +27,7 @@ import indi.ohtoai.tool.client_tools.client.command.CbowCommand;
 import indi.ohtoai.tool.client_tools.client.command.CencryptCommand;
 import indi.ohtoai.tool.client_tools.client.command.CriptideCommand;
 import indi.ohtoai.tool.client_tools.client.command.CdollCommand;
+import indi.ohtoai.tool.client_tools.client.command.CtpautoCommand;
 import indi.ohtoai.tool.client_tools.client.p2p.P2pChatManager;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.craft.CcraftState;
@@ -39,6 +40,7 @@ import indi.ohtoai.tool.client_tools.client.sweep.SweepExecutor;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepHighlightRenderer;
 import indi.ohtoai.tool.client_tools.client.sweep.SweepState;
 import indi.ohtoai.tool.client_tools.client.timer.TimerManager;
+import indi.ohtoai.tool.client_tools.client.tpauto.TpAutoManager;
 import net.minecraft.network.chat.Component;
 
 public class ClientToolsClient implements ClientModInitializer {
@@ -75,6 +77,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			CbowCommand.register(dispatcher);
 			CencryptCommand.register(dispatcher);
 			CriptideCommand.register(dispatcher);
+			CtpautoCommand.register(dispatcher);
 		});
 
 		// Register per-tick callback to drive timers and crafting executor
@@ -86,6 +89,7 @@ public class ClientToolsClient implements ClientModInitializer {
 			SequenceExecutor.getInstance().tick(client);
 			ShopExecutor.getInstance().tick(client);
 			AttackExecutor.getInstance().tick(client);
+				TpAutoManager.getInstance().tick();
 				P2pChatManager.getInstance().tick();
 			CcraftHighlightRenderer.tick();
 			SweepHighlightRenderer.tick();
@@ -126,6 +130,7 @@ public class ClientToolsClient implements ClientModInitializer {
 		ClientPlayConnectionEvents.DISCONNECT.register((handler, client) -> {
 			SweepExecutor.getInstance().handleDisconnect();
 			P2pChatManager.getInstance().onDisconnect();
+				TpAutoManager.getInstance().onDisconnect();
 		});
 	}
 }

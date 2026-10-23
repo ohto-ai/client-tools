@@ -2,6 +2,7 @@ package indi.ohtoai.tool.client_tools.client.mixin;
 
 import com.mojang.logging.LogUtils;
 import indi.ohtoai.tool.client_tools.client.p2p.P2pChatManager;
+import indi.ohtoai.tool.client_tools.client.tpauto.TpAutoManager;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientPacketListener;
 import net.minecraft.network.chat.Component;
@@ -79,6 +80,15 @@ public class P2pMessageMixin {
         // System messages don't carry sender metadata — pass null.
         // Outgoing dedup is handled by msgId check in processIncomingMessage.
         processAndDisplay(message, null);
+    }
+
+    /**
+     * Taps system chat messages for teleport request detection.
+     * Does NOT cancel the message — the player still sees the request notification.
+     */
+    @Inject(method = "handleSystemChat", at = @At("TAIL"))
+    private void onSystemChatTail(ClientboundSystemChatPacket packet, CallbackInfo ci) {
+        TpAutoManager.getInstance().processIncomingSystemChat(packet.content());
     }
 
     private static void processAndDisplay(Component raw, String sender) {
